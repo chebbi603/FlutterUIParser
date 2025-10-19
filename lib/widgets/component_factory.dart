@@ -8,6 +8,13 @@ import '../events/action_dispatcher.dart';
 import '../state/state_manager.dart';
 import '../validation/validator.dart';
 import '../permissions/permission_manager.dart';
+import '../engine/graph_engine.dart';
+import 'components/switch_component.dart';
+import 'components/slider_component.dart';
+import 'components/text_field_component.dart';
+import 'components/button_component.dart';
+import 'components/icon_component.dart';
+import 'components/text_component.dart';
 
 /// Enhanced component factory with theming, validation, permissions, and state management
 class EnhancedComponentFactory {
@@ -15,6 +22,7 @@ class EnhancedComponentFactory {
   static final EnhancedStateManager _stateManager = EnhancedStateManager();
   static final EnhancedValidator _validator = EnhancedValidator();
   static final PermissionManager _permissionManager = PermissionManager();
+  static final Map<int, Widget> _componentCache = {};
 
   static CanonicalContract? _contract;
   static Map<String, String>? _currentTheme;
@@ -144,6 +152,7 @@ class EnhancedComponentFactory {
       type: config.type,
       id: config.id,
       text: config.text,
+      src: config.src,
       binding: config.binding,
       label: config.label,
       placeholder: config.placeholder,
@@ -187,146 +196,15 @@ class EnhancedComponentFactory {
   }
 
   static Widget _createText(EnhancedComponentConfig config) {
-    String displayText = config.text ?? 'Text';
-
-    // Handle data binding
-    if (config.binding != null && config.boundData != null) {
-      final boundValue = config.boundData![config.binding!];
-      if (boundValue != null) {
-        displayText = boundValue.toString();
-      }
-    }
-
-    // Handle state binding
-    if (config.binding != null && config.binding!.startsWith('\${state.')) {
-      final stateKey = config.binding!.substring(8, config.binding!.length - 1);
-      final stateValue = _stateManager.getState(stateKey);
-      if (stateValue != null) {
-        displayText = stateValue.toString();
-      }
-    }
-
-    final text = Text(
-      displayText,
-      style: _buildTextStyle(config.style),
-      textAlign: _parseTextAlign(config.style?.textAlign),
-      maxLines: config.maxLines,
-      overflow: _parseTextOverflow(config.overflow),
-    );
-
-    return _withStyle(config, text);
+    return TextComponent.build(config);
   }
 
   static Widget _createTextField(EnhancedComponentConfig config) {
-    return StatefulBuilder(
-      builder: (context, setState) {
-        String? errorText;
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (config.label != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4.0),
-                child: Text(
-                  config.label!,
-                  style: TextStyle(
-                    fontSize: 13.0,
-                    color: _parseColor(_currentTheme?['onSurfaceVariant']),
-                  ),
-                ),
-              ),
-            CupertinoTextField(
-              placeholder: config.placeholder ?? 'Enter text',
-              keyboardType: ParsingUtils.parseKeyboardType(config.keyboardType),
-              obscureText: config.obscureText ?? false,
-              maxLines: config.maxLines ?? 1,
-              onChanged: (value) {
-                // Validate on change
-                if (config.validation != null) {
-                  final validationResult = _validator.validateField(
-                    config.id ?? 'field',
-                    value,
-                    config.validation!,
-                  );
-                  setState(() {
-                    errorText =
-                        validationResult.isValid
-                            ? null
-                            : validationResult.message;
-                  });
-                }
-
-                // Handle state updates
-                if (config.onChanged != null) {
-                  EnhancedActionDispatcher.execute(context, config.onChanged!, {
-                    'value': value,
-                  });
-                }
-              },
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color:
-                      (() {
-                        final hasError =
-                            (errorText != null && errorText!.isNotEmpty);
-                        return hasError
-                            ? (_parseColor(_currentTheme?['error']) ??
-                                CupertinoColors.destructiveRed)
-                            : CupertinoColors.separator;
-                      })(),
-                  width: 1.0,
-                ),
-                borderRadius: BorderRadius.circular(8.0),
-              ),
-            ),
-            if (errorText != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 4.0),
-                child: Text(
-                  errorText!,
-                  style: TextStyle(
-                    fontSize: 12.0,
-                    color:
-                        _parseColor(_currentTheme?['error']) ??
-                        CupertinoColors.destructiveRed,
-                  ),
-                ),
-              ),
-          ],
-        );
-      },
-    );
+    return TextFieldComponent.build(config);
   }
 
   static Widget _createButton(EnhancedComponentConfig config) {
-    return Builder(
-      builder:
-          (context) => CupertinoButton(
-            onPressed:
-                config.onTap != null
-                    ? () =>
-                        EnhancedActionDispatcher.execute(context, config.onTap!)
-                    : null,
-            color: _parseColor(config.style?.backgroundColor),
-            borderRadius: BorderRadius.circular(
-              config.style?.borderRadius ?? 8.0,
-            ),
-            padding:
-                config.style?.padding?.toEdgeInsets() ??
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Text(
-              config.text ?? 'Button',
-              style: TextStyle(
-                color:
-                    _parseColor(config.style?.foregroundColor) ??
-                    CupertinoColors.white,
-                fontSize: config.style?.fontSize ?? 16.0,
-                fontWeight: _parseFontWeight(config.style?.fontWeight),
-              ),
-            ),
-          ),
-    );
+    return ButtonComponent.build(config);
   }
 
   static Widget _createTextButton(EnhancedComponentConfig config) {
@@ -355,196 +233,37 @@ class EnhancedComponentFactory {
   }
 
   static Widget _createIconButton(EnhancedComponentConfig config) {
-    return Builder(
-      builder:
-          (context) => CupertinoButton(
-            onPressed:
-                config.onTap != null
-                    ? () =>
-                        EnhancedActionDispatcher.execute(context, config.onTap!)
-                    : null,
-            padding: EdgeInsets.zero,
-            child: Icon(
-              _parseIcon(config.icon),
-              size: ParsingUtils.safeToDouble(config.size) ?? 24.0,
-              color: _parseColor(config.style?.color),
-            ),
-          ),
-    );
+    return IconComponent.buildIconButton(config);
   }
 
   static Widget _createIcon(EnhancedComponentConfig config) {
-    return Icon(
-      _parseIcon(config.icon ?? config.name),
-      size: ParsingUtils.safeToDouble(config.size) ?? 24.0,
-      color: _parseColor(config.style?.color),
-    );
-  }
-
-  static Widget _createImage(EnhancedComponentConfig config) {
-    return NetworkOrAssetImage(
-      src:
-          config.binding != null && config.boundData != null
-              ? config.boundData![config.binding!]?.toString() ?? ''
-              : config.text ?? '',
-      width: config.style?.width,
-      height: config.style?.height,
-      fit: BoxFit.cover,
-    );
-  }
-
-  static Widget _createCard(EnhancedComponentConfig config) {
-    final children =
-        config.children
-            ?.map(
-              (child) =>
-                  createComponent(child.copyWith(boundData: config.boundData)),
-            )
-            .toList() ??
-        [];
-
-    return Container(
-      padding:
-          config.style?.padding?.toEdgeInsets() ?? const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color:
-            _parseColor(config.style?.backgroundColor) ??
-            _parseColor(_currentTheme?['surface']),
-        borderRadius: BorderRadius.circular(config.style?.borderRadius ?? 8.0),
-        boxShadow:
-            config.style?.elevation != null && config.style!.elevation! > 0
-                ? [
-                  BoxShadow(
-                    color: CupertinoColors.black.withValues(alpha: 0.1),
-                    blurRadius: config.style!.elevation!,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-                : null,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: children,
-      ),
-    );
-  }
-
-  static Widget _createList(EnhancedComponentConfig config) {
-    return EnhancedListWidget(config: config);
-  }
-
-  static Widget _createGrid(EnhancedComponentConfig config) {
-    final children =
-        config.children?.map((child) => createComponent(child)).toList() ?? [];
-    final columns = config.columns ?? 2;
-    final spacing = config.spacing ?? 8.0;
-
-    return GridView.count(
-      crossAxisCount: columns,
-      crossAxisSpacing: spacing,
-      mainAxisSpacing: spacing,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      children: children,
-    );
-  }
-
-  static Widget _createRow(EnhancedComponentConfig config) {
-    final children =
-        config.children?.map((child) => createComponent(child)).toList() ?? [];
-
-    return Row(
-      mainAxisAlignment: _parseMainAxisAlignment(config.mainAxisAlignment),
-      crossAxisAlignment: _parseCrossAxisAlignment(config.crossAxisAlignment),
-      children: _applySpacing(children, Axis.horizontal, config.spacing ?? 0),
-    );
-  }
-
-  static Widget _createColumn(EnhancedComponentConfig config) {
-    final children =
-        config.children?.map((child) => createComponent(child)).toList() ?? [];
-
-    return Column(
-      mainAxisAlignment: _parseMainAxisAlignment(config.mainAxisAlignment),
-      crossAxisAlignment: _parseCrossAxisAlignment(config.crossAxisAlignment),
-      children: _applySpacing(children, Axis.vertical, config.spacing ?? 0),
-    );
-  }
-
-  static Widget _createCenter(EnhancedComponentConfig config) {
-    final child =
-        config.children?.isNotEmpty == true
-            ? createComponent(config.children!.first)
-            : const SizedBox.shrink();
-
-    return Center(child: child);
-  }
-
-  static Widget _createHero(EnhancedComponentConfig config) {
-    final children =
-        config.children?.map((child) => createComponent(child)).toList() ?? [];
-
-    return Container(
-      padding:
-          config.style?.padding?.toEdgeInsets() ?? const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: _parseColor(config.style?.backgroundColor),
-        borderRadius: BorderRadius.circular(config.style?.borderRadius ?? 0),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: children,
-      ),
-    );
-  }
-
-  static Widget _createForm(EnhancedComponentConfig config) {
-    return EnhancedFormWidget(config: config);
-  }
-
-  static Widget _createSearchBar(EnhancedComponentConfig config) {
-    return StatefulBuilder(
-      builder: (context, setState) {
-        // Simple debounce using Timer if debounceMs specified
-        Timer? _debounce;
-
-        return CupertinoSearchTextField(
-          placeholder: config.placeholder ?? 'Search...',
-          onChanged: (value) {
-            if (config.onChanged != null) {
-              final debounceMs = config.onChanged!.debounceMs ?? 0;
-              if (_debounce != null) {
-                _debounce!.cancel();
-                _debounce = null;
-              }
-              if (debounceMs > 0) {
-                _debounce = Timer(Duration(milliseconds: debounceMs), () {
-                  EnhancedActionDispatcher.execute(
-                    context,
-                    config.onChanged!,
-                    {'value': value},
-                  );
-                });
-              } else {
-                EnhancedActionDispatcher.execute(
-                  context,
-                  config.onChanged!,
-                  {'value': value},
-                );
-              }
-            }
-          },
-        );
-      },
-    );
-  }
-
-  static Widget _createFilterChips(EnhancedComponentConfig config) {
-    // This would be implemented with actual chip selection logic
-    return const Placeholder(fallbackHeight: 40);
+    return IconComponent.buildIcon(config);
   }
 
   static Widget _createChip(EnhancedComponentConfig config) {
+    // Memoize pure chip (no binding or actions)
+    if (config.binding == null && config.onTap == null && config.onChanged == null) {
+      final hash = _hashChipConfig(config);
+      final cached = _componentCache[hash];
+      if (cached != null) return cached;
+      final chip = Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: _parseColor(config.style?.backgroundColor),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Text(
+          config.text ?? 'Chip',
+          style: TextStyle(
+            color: _parseColor(config.style?.foregroundColor),
+            fontSize: 12,
+          ),
+        ),
+      );
+      _componentCache[hash] = chip;
+      return chip;
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
@@ -566,87 +285,11 @@ class EnhancedComponentFactory {
   }
 
   static Widget _createSwitch(EnhancedComponentConfig config) {
-    return StatefulBuilder(
-      builder: (context, setState) {
-        String? stateKey;
-        if (config.binding != null) {
-          if (config.binding!.startsWith('\${state.')) {
-            stateKey =
-                config.binding!.substring(8, config.binding!.length - 1);
-          } else {
-            stateKey = config.binding;
-          }
-        } else if (config.onChanged?.params != null) {
-          stateKey = config.onChanged!.params!['key']?.toString();
-        }
-        bool value = false;
-        if (stateKey != null) {
-          final current = _stateManager.getState(stateKey);
-          if (current is bool) {
-            value = current;
-          } else if (current is num) {
-            value = current != 0;
-          }
-        }
-        return CupertinoSwitch(
-          value: value,
-          onChanged: (newValue) {
-            setState(() {});
-            if (config.onChanged != null) {
-              EnhancedActionDispatcher.execute(context, config.onChanged!, {
-                'value': newValue,
-              });
-            }
-            if (stateKey != null) {
-              _stateManager.setState(stateKey, newValue);
-            }
-          },
-        );
-      },
-    );
+    return SwitchComponent.build(config);
   }
 
   static Widget _createSlider(EnhancedComponentConfig config) {
-    return StatefulBuilder(
-      builder: (context, setState) {
-        String? stateKey;
-        if (config.binding != null) {
-          if (config.binding!.startsWith('\${state.')) {
-            stateKey =
-                config.binding!.substring(8, config.binding!.length - 1);
-          } else {
-            stateKey = config.binding;
-          }
-        } else if (config.onChanged?.params != null) {
-          stateKey = config.onChanged!.params!['key']?.toString();
-        }
-        double value = 0.5;
-        if (stateKey != null) {
-          final current = _stateManager.getState(stateKey);
-          if (current is num) {
-            value = current.toDouble();
-          } else if (current is String) {
-            final parsed = double.tryParse(current);
-            if (parsed != null) value = parsed;
-          }
-        }
-        value = value.clamp(0.0, 1.0);
-        return CupertinoSlider(
-          value: value,
-          onChanged: (newValue) {
-            setState(() {});
-            if (config.onChanged != null) {
-              EnhancedActionDispatcher.execute(context, config.onChanged!, {
-                'value': newValue,
-              });
-            }
-            if (stateKey != null) {
-              _stateManager.setState(stateKey, newValue);
-            }
-          },
-        );
-      },
-    );
+    return SliderComponent.build(config);
   }
 
   static Widget _createAudio(EnhancedComponentConfig config) {
@@ -664,36 +307,7 @@ class EnhancedComponentFactory {
     );
   }
 
-  // Helper methods
-  static TextStyle _buildTextStyle(StyleConfig? style) {
-    return TextStyle(
-      fontSize: style?.fontSize ?? 16.0,
-      fontWeight: _parseFontWeight(style?.fontWeight),
-      color: _parseColor(style?.color),
-    );
-  }
-
-  static Widget _withStyle(EnhancedComponentConfig config, Widget child) {
-    Widget current = child;
-
-    if (config.style != null) {
-      final style = config.style!;
-
-      // Apply container styling
-      current = Container(
-        width: style.width,
-        height: style.height,
-        constraints:
-            style.maxWidth != null
-                ? BoxConstraints(maxWidth: style.maxWidth!)
-                : null,
-        margin: style.margin?.toEdgeInsets(),
-        child: current,
-      );
-    }
-
-    return current;
-  }
+  // Helper methods (moved to components/common.dart)
 
   static List<Widget> _applySpacing(
     List<Widget> children,
@@ -747,18 +361,6 @@ class EnhancedComponentFactory {
     }
   }
 
-  static TextOverflow _parseTextOverflow(String? overflow) {
-    switch (overflow) {
-      case 'ellipsis':
-        return TextOverflow.ellipsis;
-      case 'fade':
-        return TextOverflow.fade;
-      case 'clip':
-        return TextOverflow.clip;
-      default:
-        return TextOverflow.visible;
-    }
-  }
 
   static MainAxisAlignment _parseMainAxisAlignment(String? alignment) {
     switch (alignment) {
@@ -792,50 +394,186 @@ class EnhancedComponentFactory {
     }
   }
 
-  static IconData _parseIcon(String? iconName) {
-    if (iconName == null) return CupertinoIcons.circle;
 
-    // Use contract icon mapping if available
-    if (_contract?.assets.icons.containsKey(iconName) == true) {
-      final iconPath = _contract!.assets.icons[iconName]!;
-      // Parse CupertinoIcons path
-      if (iconPath.startsWith('CupertinoIcons.')) {
-        return _getCupertinoIcon(iconPath.substring(15));
-      }
-    }
-
-    return _getCupertinoIcon(iconName);
+  static int _hashChipConfig(EnhancedComponentConfig config) {
+    return Object.hash(
+      'chip',
+      config.text,
+      config.style?.backgroundColor,
+      config.style?.foregroundColor,
+      12, // font size
+    );
   }
 
-  static IconData _getCupertinoIcon(String name) {
-    switch (name) {
-      case 'house':
-        return CupertinoIcons.house;
-      case 'doc_text':
-        return CupertinoIcons.doc_text;
-      case 'person_circle':
-        return CupertinoIcons.person_circle;
-      case 'gear':
-        return CupertinoIcons.gear;
-      case 'plus':
-        return CupertinoIcons.plus;
-      case 'ellipsis':
-        return CupertinoIcons.ellipsis;
-      case 'chart_bar':
-        return CupertinoIcons.chart_bar;
-      case 'exclamationmark_triangle':
-        return CupertinoIcons.exclamationmark_triangle;
-      default:
-        return CupertinoIcons.circle;
+
+  // Builder methods restored inside EnhancedComponentFactory
+  static Widget _createImage(EnhancedComponentConfig config) {
+    final src = config.binding != null && config.boundData != null
+        ? config.boundData![config.binding!]?.toString() ?? ''
+        : (config.src ?? config.text ?? '');
+    if (config.src == null && config.text != null) {
+      // Deprecation warning for image.text
+      debugPrint('[image] "text" is deprecated; use "src" instead.');
     }
+    return NetworkOrAssetImage(
+      src: src,
+      width: config.style?.width,
+      height: config.style?.height,
+      fit: BoxFit.cover,
+    );
+  }
+
+  static Widget _createCard(EnhancedComponentConfig config) {
+    final children = config.children
+            ?.map((child) => createComponent(child.copyWith(boundData: config.boundData)))
+            .toList() ??
+        [];
+
+    return Container(
+      padding: config.style?.padding?.toEdgeInsets() ?? const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _parseColor(config.style?.backgroundColor) ?? _parseColor(_currentTheme?['surface']),
+        borderRadius: BorderRadius.circular(config.style?.borderRadius ?? 8.0),
+        boxShadow: config.style?.elevation != null && config.style!.elevation! > 0
+            ? [
+                BoxShadow(
+                  color: CupertinoColors.black.withValues(alpha: 0.1),
+                  blurRadius: config.style!.elevation!,
+                  offset: const Offset(0, 2),
+                ),
+              ]
+            : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children,
+      ),
+    );
+  }
+
+  static Widget _createList(EnhancedComponentConfig config) {
+    return EnhancedListWidget(config: config, componentId: config.id);
+  }
+
+  static Widget _createGrid(EnhancedComponentConfig config) {
+    final children = config.children?.map((child) => createComponent(child)).toList() ?? [];
+    final columns = config.columns ?? 2;
+    final spacing = config.spacing ?? 8.0;
+
+    return GridView.count(
+      crossAxisCount: columns,
+      crossAxisSpacing: spacing,
+      mainAxisSpacing: spacing,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      children: children,
+    );
+  }
+
+  static Widget _createRow(EnhancedComponentConfig config) {
+    final children = config.children?.map((child) => createComponent(child)).toList() ?? [];
+
+    return Row(
+      mainAxisAlignment: _parseMainAxisAlignment(config.mainAxisAlignment),
+      crossAxisAlignment: _parseCrossAxisAlignment(config.crossAxisAlignment),
+      children: _applySpacing(children, Axis.horizontal, config.spacing ?? 0),
+    );
+  }
+
+  static Widget _createColumn(EnhancedComponentConfig config) {
+    final children = config.children?.map((child) => createComponent(child)).toList() ?? [];
+
+    return Column(
+      mainAxisAlignment: _parseMainAxisAlignment(config.mainAxisAlignment),
+      crossAxisAlignment: _parseCrossAxisAlignment(config.crossAxisAlignment),
+      children: _applySpacing(children, Axis.vertical, config.spacing ?? 0),
+    );
+  }
+
+  static Widget _createCenter(EnhancedComponentConfig config) {
+    final child = config.children?.isNotEmpty == true
+        ? createComponent(config.children!.first)
+        : const SizedBox.shrink();
+
+    return Center(child: child);
+  }
+
+  static Widget _createHero(EnhancedComponentConfig config) {
+    final children = config.children?.map((child) => createComponent(child)).toList() ?? [];
+
+    return Container(
+      padding: config.style?.padding?.toEdgeInsets() ?? const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: _parseColor(config.style?.backgroundColor),
+        borderRadius: BorderRadius.circular(config.style?.borderRadius ?? 0),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: children,
+      ),
+    );
+  }
+
+  static Widget _createForm(EnhancedComponentConfig config) {
+    return EnhancedFormWidget(config: config);
+  }
+
+  static Widget _createSearchBar(EnhancedComponentConfig config) {
+    return Builder(
+      builder: (context) {
+        final String debounceKey = config.id ?? 'searchBar_${config.placeholder ?? ''}';
+        return CupertinoSearchTextField(
+          placeholder: config.placeholder ?? 'Search...',
+          onChanged: (value) {
+            if (config.onChanged != null) {
+              final debounceMs = config.onChanged!.debounceMs ?? 0;
+              if (debounceMs > 0) {
+                _debounceAction(debounceKey, Duration(milliseconds: debounceMs), () {
+                  EnhancedActionDispatcher.execute(
+                    context,
+                    config.onChanged!,
+                    {'value': value},
+                  );
+                });
+              } else {
+                EnhancedActionDispatcher.execute(
+                  context,
+                  config.onChanged!,
+                  {'value': value},
+                );
+              }
+            }
+          },
+        );
+      },
+    );
+  }
+
+  static final Map<String, Timer?> _debouncers = {};
+
+  static void _debounceAction(String key, Duration duration, void Function() action) {
+    final existing = _debouncers[key];
+    if (existing != null) {
+      existing.cancel();
+    }
+    _debouncers[key] = Timer(duration, () {
+      _debouncers[key]?.cancel();
+      _debouncers[key] = null;
+      action();
+    });
+  }
+
+  static Widget _createFilterChips(EnhancedComponentConfig config) {
+    return const Placeholder(fallbackHeight: 40);
   }
 }
 
 /// Enhanced list widget with data source integration
 class EnhancedListWidget extends StatefulWidget {
   final EnhancedComponentConfig config;
+  final String? componentId;
 
-  const EnhancedListWidget({super.key, required this.config});
+  const EnhancedListWidget({super.key, required this.config, this.componentId});
 
   @override
   State<EnhancedListWidget> createState() => _EnhancedListWidgetState();
@@ -846,37 +584,75 @@ class _EnhancedListWidgetState extends State<EnhancedListWidget> {
   bool loading = false;
   bool error = false;
   String? errorMessage;
+  int _currentPage = 1;
+  bool _hasMore = true;
+  bool _appendLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _loadData();
+    // Defer loading until visible to approximate lazy evaluation
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final id = widget.componentId ?? 'list_${widget.config.dataSource?.service}_${widget.config.dataSource?.endpoint}';
+        GraphEngine().setComponentVisible(id, true);
+        _loadPage(reset: true);
+      }
+    });
   }
 
-  Future<void> _loadData() async {
+  Future<void> _loadPage({bool reset = false}) async {
     if (widget.config.dataSource == null) return;
+    final id = widget.componentId ?? 'list_${widget.config.dataSource?.service}_${widget.config.dataSource?.endpoint}';
 
     setState(() {
-      loading = true;
-      error = false;
+      if (reset) {
+        loading = true;
+        error = false;
+        _currentPage = 1;
+        _hasMore = true;
+        items = [];
+      } else {
+        _appendLoading = true;
+      }
     });
 
     try {
       final dataSource = widget.config.dataSource!;
+      final Map<String, dynamic> params = {
+        ...?dataSource.params,
+      };
+      if (dataSource.pagination?.enabled == true) {
+        params['page'] = _currentPage;
+      }
+
       final response = await ContractApiService().fetchList(
         service: dataSource.service ?? '',
         endpoint: dataSource.endpoint ?? '',
-        params: dataSource.params,
+        params: params,
         listPath: dataSource.listPath ?? 'data',
+        totalPath: dataSource.pagination?.totalPath,
+        pagePath: dataSource.pagination?.pagePath,
       );
 
       setState(() {
-        items = response.data;
-        loading = false;
+        if (reset) {
+          items = response.data;
+          loading = false;
+        } else {
+          items = [...items, ...response.data];
+          _appendLoading = false;
+        }
+        _hasMore = response.hasMore;
+        if (_hasMore && (response.data.isNotEmpty)) {
+          _currentPage += 1;
+        }
       });
+      GraphEngine().notifyDataSourceChange(id);
     } catch (e) {
       setState(() {
         loading = false;
+        _appendLoading = false;
         error = true;
         errorMessage = e.toString();
       });
@@ -907,16 +683,98 @@ class _EnhancedListWidgetState extends State<EnhancedListWidget> {
       return const SizedBox.shrink();
     }
 
+    final totalCount = items.length + (_hasMore ? 1 : 0);
+
+    final useVirtualScroll = widget.config.dataSource?.virtualScrolling == true;
+
+    if (useVirtualScroll) {
+      // Render a dedicated scrollable viewport for large lists
+      final viewportHeight = widget.config.style?.height ?? 400;
+      return SizedBox(
+        height: viewportHeight,
+        child: ListView.builder(
+          primary: false,
+          shrinkWrap: false,
+          physics: const AlwaysScrollableScrollPhysics(),
+          itemCount: totalCount,
+          itemBuilder: (context, index) {
+            if (_hasMore && index == items.length) {
+              if (_appendLoading) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12.0),
+                  child: Center(child: CupertinoActivityIndicator()),
+                );
+              }
+              if (widget.config.dataSource?.pagination?.autoLoad == true) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted && !_appendLoading) {
+                    _loadPage(reset: false);
+                  }
+                });
+                return const SizedBox.shrink();
+              }
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12.0),
+                child: Center(
+                  child: CupertinoButton(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    onPressed: () => _loadPage(reset: false),
+                    child: const Text('Load more'),
+                  ),
+                ),
+              );
+            }
+            final item = items[index];
+            return EnhancedComponentFactory.createComponent(
+              widget.config.itemBuilder!.copyWith(boundData: item),
+            );
+          },
+        ),
+      );
+    }
+
     return ListView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: items.length,
-      itemBuilder: (context, index) {
-        final item = items[index];
-        return EnhancedComponentFactory.createComponent(
-          widget.config.itemBuilder!.copyWith(boundData: item),
+      itemCount: totalCount,
+      itemBuilder: _buildListItem,
+    );
+  }
+
+  Widget _buildListItem(BuildContext context, int index) {
+    if (_hasMore && index == items.length) {
+      // Load more footer
+      if (_appendLoading) {
+        return const Padding(
+          padding: EdgeInsets.symmetric(vertical: 12.0),
+          child: Center(child: CupertinoActivityIndicator()),
         );
-      },
+      }
+      // Auto-load next page when footer becomes visible if enabled
+      if (widget.config.dataSource?.pagination?.autoLoad == true) {
+        // Defer to next microtask to avoid setState during build
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && !_appendLoading) {
+            _loadPage(reset: false);
+          }
+        });
+        return const SizedBox.shrink();
+      }
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12.0),
+        child: Center(
+          child: CupertinoButton(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            onPressed: () => _loadPage(reset: false),
+            child: const Text('Load more'),
+          ),
+        ),
+      );
+    }
+
+    final item = items[index];
+    return EnhancedComponentFactory.createComponent(
+      widget.config.itemBuilder!.copyWith(boundData: item),
     );
   }
 }

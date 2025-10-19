@@ -5,6 +5,8 @@ import '../models/config_models.dart';
 import '../services/api_service.dart';
 import '../state/state_manager.dart';
 import '../navigation/navigation_bridge.dart';
+import '../events/event_bus.dart';
+import '../events/action_middleware.dart';
 
 /// Enhanced action dispatcher with comprehensive action support
 class EnhancedActionDispatcher {
@@ -17,7 +19,18 @@ class EnhancedActionDispatcher {
     ActionConfig config, [
     Map<String, dynamic>? additionalData,
   ]) async {
+    final bus = EventBus();
+    final middleware = ActionMiddlewarePipeline();
+    final ctx = <String, dynamic>{'additionalData': additionalData};
     try {
+      // Loading state support
+      final String? loadingKey = config.params?['loadingKey']?.toString();
+      if (loadingKey != null) {
+        await _stateManager.setGlobalState(loadingKey, true);
+      }
+      bus.emit(ActionStarted(config.action, ctx));
+      await middleware.runBefore(config, ctx);
+
       switch (config.action) {
         case 'navigate':
           await _handleNavigate(context, config);
@@ -33,6 +46,12 @@ class EnhancedActionDispatcher {
           break;
         case 'updateState':
           await _handleUpdateState(config, additionalData);
+          break;
+        case 'undo':
+          await _handleUndo(config);
+          break;
+        case 'redo':
+          await _handleRedo(config);
           break;
         case 'showError':
           await _handleShowError(context, config);
@@ -59,7 +78,15 @@ class EnhancedActionDispatcher {
           debugPrint('Unknown action: ${config.action}');
           break;
       }
+
+      await middleware.runAfter(config, ctx);
+      bus.emit(ActionCompleted(config.action));
+      if (loadingKey != null) {
+        await _stateManager.setGlobalState(loadingKey, false);
+      }
     } catch (e) {
+      await middleware.runOnError(config, e, ctx);
+      bus.emit(ActionFailed(config.action, e));
       debugPrint('Error executing action ${config.action}: $e');
 
       // Execute error callback if provided
@@ -68,6 +95,11 @@ class EnhancedActionDispatcher {
       } else {
         // Show default error
         await _showDefaultError(context, e.toString());
+      }
+
+      final String? loadingKey = config.params?['loadingKey']?.toString();
+      if (loadingKey != null) {
+        await _stateManager.setGlobalState(loadingKey, false);
       }
     }
   }
@@ -135,15 +167,40 @@ class EnhancedActionDispatcher {
       data.addAll(_resolveTemplates(additionalData));
     }
 
-    final response = await _apiService.call(
-      service: service,
-      endpoint: endpoint,
-      data: data,
-    );
+    // Apply optimistic state updates if configured
+    final optimistic = config.params?['optimisticState'];
+    Map<String, dynamic>? previousValues;
+    if (optimistic is Map<String, dynamic>) {
+      previousValues = {};
+      // Capture previous values and apply new ones
+      for (final entry in optimistic.entries) {
+        final key = entry.key;
+        final newValue = entry.value;
+        final oldValue = _stateManager.getState(key);
+        previousValues[key] = oldValue;
+        await _stateManager.setState(key, newValue);
+      }
+    }
 
-    // Execute success callback
-    if (config.onSuccess != null) {
-      await execute(context, config.onSuccess!, {'response': response});
+    try {
+      final response = await _apiService.call(
+        service: service,
+        endpoint: endpoint,
+        data: data,
+      );
+
+      // Execute success callback
+      if (config.onSuccess != null) {
+        await execute(context, config.onSuccess!, {'response': response});
+      }
+    } catch (e) {
+      // Roll back optimistic updates on failure
+      if (previousValues != null) {
+        for (final entry in previousValues.entries) {
+          await _stateManager.setState(entry.key, entry.value);
+        }
+      }
+      rethrow;
     }
   }
 
@@ -389,23 +446,34 @@ class EnhancedActionDispatcher {
     _apiService.clearCache();
   }
 
+  static Future<void> _handleUndo(ActionConfig config) async {
+    final key = config.key ?? config.params?['key']?.toString();
+    if (key == null) return;
+    await _stateManager.undoState(key);
+  }
+
+  static Future<void> _handleRedo(ActionConfig config) async {
+    final key = config.key ?? config.params?['key']?.toString();
+    if (key == null) return;
+    await _stateManager.redoState(key);
+  }
+
   static Future<void> _showDefaultError(
     BuildContext context,
     String error,
   ) async {
     showCupertinoDialog(
       context: context,
-      builder:
-          (context) => CupertinoAlertDialog(
-            title: const Text('Error'),
-            content: Text(error),
-            actions: [
-              CupertinoDialogAction(
-                child: const Text('OK'),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ],
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('Error'),
+        content: Text(error),
+        actions: [
+          CupertinoDialogAction(
+            child: const Text('OK'),
+            onPressed: () => Navigator.of(context).pop(),
           ),
+        ],
+      ),
     );
   }
 }

@@ -283,3 +283,17 @@ The original JSON-driven UI demo is still available:
   - Clearing global or page state also clears persisted values.
 
 No changes are required in UI components; they bind state as usual.
+
+## ✅ Validation
+
+- Field-level validation keys: `required`, `email`, `minLength`, `maxLength`, `pattern`, `message`
+- Validates on change and shows inline errors with themed color
+- Example:
+```json
+{ "type": "textField", "label": "Email", "keyboardType": "email", "validation": { "required": true, "email": true, "message": "Please enter a valid email" } }
+```
+
+## 🛠️ Development
+
+- Run `dart analyze` to ensure zero lints
+- Run `flutter run` (iOS, Android, or Web) to validate UI

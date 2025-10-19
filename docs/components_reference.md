@@ -44,6 +44,10 @@ This document lists every component type rendered by `EnhancedComponentFactory` 
 ```json
 { "type": "textField", "label": "Email", "placeholder": "you@example.com", "keyboardType": "email", "validation": { "required": true, "email": true } }
 ```
+- Notes:
+  - Defaults to left-to-right input; wrap with `Directionality` in app code to change.
+  - Focus and text persist across rebuilds via cached controller and focus node.
+  - Error styling uses theme `error` color when validation message is present.
 
 ### Button (`type: "button"`)
 - Props: `text`, `style.backgroundColor`, `style.foregroundColor`, `style.borderRadius`, `style.padding`.
@@ -87,11 +91,18 @@ This document lists every component type rendered by `EnhancedComponentFactory` 
 - Data: `dataSource` (`service`, `endpoint`, `params`, `listPath` default `data`).
 - Rendering: `itemBuilder` is a component template; receives each item as `boundData`.
 - States: Optional `loadingState`, `emptyState`, `errorState` as components.
+- Pagination: `dataSource.pagination` supports `enabled`, `totalPath`, `pagePath`, `autoLoad` for infinite scroll.
 - Example:
 ```json
 {
   "type": "list",
-  "dataSource": { "service": "products", "endpoint": "/list", "params": { "q": "phones" }, "listPath": "data.items" },
+  "dataSource": {
+    "service": "products",
+    "endpoint": "/list",
+    "params": { "q": "phones" },
+    "listPath": "data.items",
+    "pagination": { "enabled": true, "totalPath": "data.total", "pagePath": "data.page", "autoLoad": true }
+  },
   "itemBuilder": { "type": "card", "children": [ { "type": "text", "binding": "name" }, { "type": "text", "binding": "price" } ] },
   "emptyState": { "type": "text", "text": "No items" }
 }

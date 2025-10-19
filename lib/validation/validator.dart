@@ -83,9 +83,9 @@ class EnhancedValidator {
       return ValidationResult(isValid: true);
     }
 
-    // Required validation
-    if (rule.notEmpty == true &&
-        (value == null || value.toString().trim().isEmpty)) {
+    // Required validation (standard vocabulary)
+    final isRequired = rule.required == true;
+    if (isRequired && (value == null || value.toString().trim().isEmpty)) {
       return ValidationResult(isValid: false, message: rule.message);
     }
 

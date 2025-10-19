@@ -297,9 +297,35 @@ class ParsingUtils {
     }
   }
 
-  /// Parse IconData from string (simplified version)
+  /// Parse IconData from string with contract-compatible names and Cupertino prefix support
   static IconData parseIcon(String? iconName) {
-    switch (iconName?.toLowerCase()) {
+    if (iconName == null || iconName.isEmpty) return CupertinoIcons.circle;
+
+    String name = iconName;
+    if (name.startsWith('CupertinoIcons.')) {
+      name = name.substring('CupertinoIcons.'.length);
+    }
+
+    switch (name.toLowerCase()) {
+      // Common actions
+      case 'add':
+      case 'plus':
+        return CupertinoIcons.plus;
+      case 'delete':
+      case 'trash':
+        return CupertinoIcons.delete;
+      case 'edit':
+      case 'pencil':
+        return CupertinoIcons.pencil;
+      case 'settings':
+      case 'gear':
+        return CupertinoIcons.gear;
+      case 'search':
+        return CupertinoIcons.search;
+      case 'ellipsis':
+        return CupertinoIcons.ellipsis;
+
+      // Navigation chevrons
       case 'chevron_right':
         return CupertinoIcons.chevron_right;
       case 'chevron_left':
@@ -308,24 +334,28 @@ class ParsingUtils {
         return CupertinoIcons.chevron_down;
       case 'chevron_up':
         return CupertinoIcons.chevron_up;
-      case 'add':
-        return CupertinoIcons.add;
-      case 'delete':
-        return CupertinoIcons.delete;
-      case 'edit':
-        return CupertinoIcons.pencil;
-      case 'settings':
-        return CupertinoIcons.settings;
+
+      // People/content
       case 'home':
-        return CupertinoIcons.home;
+      case 'house':
+        return CupertinoIcons.house;
       case 'person':
-        return CupertinoIcons.person;
+      case 'person_circle':
+        return CupertinoIcons.person_circle;
       case 'mail':
         return CupertinoIcons.mail;
       case 'phone':
         return CupertinoIcons.phone;
-      case 'search':
-        return CupertinoIcons.search;
+      case 'doc_text':
+        return CupertinoIcons.doc_text;
+
+      // Status/indicators
+      case 'chart_bar':
+        return CupertinoIcons.chart_bar;
+      case 'exclamationmark_triangle':
+        return CupertinoIcons.exclamationmark_triangle;
+
+      // Fallback
       default:
         return CupertinoIcons.circle;
     }

@@ -527,6 +527,7 @@ class EnhancedComponentConfig {
   final String type;
   final String? id;
   final String? text;
+  final String? src;
   final String? binding;
   final String? label;
   final String? placeholder;
@@ -555,11 +556,13 @@ class EnhancedComponentConfig {
   final String? crossAxisAlignment;
   final double? spacing;
   final Map<String, dynamic>? boundData;
+  final bool? enabled;
 
   EnhancedComponentConfig({
     required this.type,
     this.id,
     this.text,
+    this.src,
     this.binding,
     this.label,
     this.placeholder,
@@ -588,6 +591,7 @@ class EnhancedComponentConfig {
     this.crossAxisAlignment,
     this.spacing,
     this.boundData,
+    this.enabled,
   });
 
   factory EnhancedComponentConfig.fromJson(Map<String, dynamic> json) {
@@ -595,6 +599,7 @@ class EnhancedComponentConfig {
       type: json['type'] ?? '',
       id: json['id'],
       text: json['text'],
+      src: json['src'] ?? json['text'],
       binding: json['binding'],
       label: json['label'],
       placeholder: json['placeholder'],
@@ -656,6 +661,7 @@ class EnhancedComponentConfig {
       crossAxisAlignment: json['crossAxisAlignment'],
       spacing: ParsingUtils.safeToDouble(json['spacing']),
       boundData: json['boundData'],
+      enabled: json['enabled'] ?? true,
     );
   }
 
@@ -663,13 +669,16 @@ class EnhancedComponentConfig {
     String? type,
     String? id,
     String? text,
+    String? src,
     String? binding,
     Map<String, dynamic>? boundData,
+    bool? enabled,
   }) {
     return EnhancedComponentConfig(
       type: type ?? this.type,
       id: id ?? this.id,
       text: text ?? this.text,
+      src: src ?? this.src,
       binding: binding ?? this.binding,
       label: label,
       placeholder: placeholder,
@@ -698,6 +707,7 @@ class EnhancedComponentConfig {
       crossAxisAlignment: crossAxisAlignment,
       spacing: spacing,
       boundData: boundData ?? this.boundData,
+      enabled: enabled ?? this.enabled,
     );
   }
 }
@@ -709,6 +719,7 @@ class EnhancedDataSourceConfig {
   final Map<String, dynamic>? params;
   final String? listPath;
   final EnhancedPaginationConfig? pagination;
+  final bool? virtualScrolling;
 
   EnhancedDataSourceConfig({
     this.service,
@@ -716,6 +727,7 @@ class EnhancedDataSourceConfig {
     this.params,
     this.listPath,
     this.pagination,
+    this.virtualScrolling,
   });
 
   factory EnhancedDataSourceConfig.fromJson(Map<String, dynamic> json) {
@@ -728,6 +740,7 @@ class EnhancedDataSourceConfig {
           json['pagination'] != null
               ? EnhancedPaginationConfig.fromJson(json['pagination'])
               : null,
+      virtualScrolling: json['virtualScrolling'],
     );
   }
 }
@@ -736,11 +749,13 @@ class EnhancedPaginationConfig {
   final bool enabled;
   final String? totalPath;
   final String? pagePath;
+  final bool autoLoad;
 
   EnhancedPaginationConfig({
     required this.enabled,
     this.totalPath,
     this.pagePath,
+    this.autoLoad = false,
   });
 
   factory EnhancedPaginationConfig.fromJson(Map<String, dynamic> json) {
@@ -748,6 +763,7 @@ class EnhancedPaginationConfig {
       enabled: json['enabled'] ?? true,
       totalPath: json['totalPath'],
       pagePath: json['pagePath'],
+      autoLoad: json['autoLoad'] ?? false,
     );
   }
 }
@@ -1199,13 +1215,13 @@ class ValidationsConfig {
 class ValidationRuleConfig {
   final String? pattern;
   final int? minLength;
-  final bool? notEmpty;
+  final bool? required;
   final String message;
 
   ValidationRuleConfig({
     this.pattern,
     this.minLength,
-    this.notEmpty,
+    this.required,
     required this.message,
   });
 
@@ -1213,7 +1229,7 @@ class ValidationRuleConfig {
     return ValidationRuleConfig(
       pattern: json['pattern'],
       minLength: json['minLength'],
-      notEmpty: json['notEmpty'],
+      required: json['required'],
       message: json['message'] ?? 'Validation failed',
     );
   }

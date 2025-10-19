@@ -13,12 +13,17 @@ class EnhancedApiService {
   final Map<String, CachedResponse> _cache = {};
   final Map<String, String> _authTokens = {};
   String? _baseApiUrl;
+  CanonicalContract? _contract;
+
+  /// Pending request deduplication: key -> in-flight future
+  final Map<String, Future<ApiResponse<dynamic>>> _pending = {};
 
   /// Initialize the service with canonical contract
   void initialize(CanonicalContract contract) {
     _services.clear();
     _services.addAll(contract.services);
     _baseApiUrl = _extractBaseUrl();
+    _contract = contract;
   }
 
   String? _extractBaseUrl() {
@@ -72,33 +77,66 @@ class EnhancedApiService {
       endpointConfig.queryParams,
     );
 
-    // Check cache first
-    if (endpointConfig.method.toUpperCase() == 'GET' &&
-        endpointConfig.caching?.enabled == true) {
-      final cached = _getFromCache(url);
-      if (cached != null) {
-        return ApiResponse<T>(
-          data: cached.data as T,
-          statusCode: 200,
-          headers: cached.headers,
-          fromCache: true,
-        );
-      }
-    }
-
-    // Prepare headers
+    // Build headers
     final requestHeaders = _buildHeaders(endpointConfig, headers);
 
-    // Validate request data
-    if (endpointConfig.requestSchema != null && data != null) {
-      _validateRequestData(data, endpointConfig.requestSchema!);
+    // Check cache
+    final cached = endpointConfig.caching?.enabled == true ? _getFromCache(url) : null;
+    if (cached != null) {
+      return ApiResponse<T>(
+        data: cached.data as T,
+        statusCode: 200,
+        headers: cached.headers,
+        fromCache: true,
+      );
     }
 
-    // Make request with retry policy
+    // Compose deduplication key (method+url+body)
+    final method = endpointConfig.method;
+    final dedupKey = _dedupKey(method, url, data);
+
+    // If a matching request is in-flight, await it and cast
+    final existing = _pending[dedupKey];
+    if (existing != null) {
+      final shared = await existing;
+      return ApiResponse<T>(
+        data: shared.data as T,
+        statusCode: shared.statusCode,
+        headers: shared.headers,
+        fromCache: shared.fromCache,
+      );
+    }
+
+    // Start the request and store in pending
+    final completer = _performRequest<T>(
+      url: url,
+      method: method,
+      headers: requestHeaders,
+      data: data,
+      endpointConfig: endpointConfig,
+    );
+    _pending[dedupKey] = completer as Future<ApiResponse<dynamic>>;
+
+    try {
+      final result = await completer;
+      return result;
+    } finally {
+      // Clean up pending regardless of success or failure
+      _pending.remove(dedupKey);
+    }
+  }
+
+  Future<ApiResponse<T>> _performRequest<T>({
+    required String url,
+    required String method,
+    required Map<String, String> headers,
+    Map<String, dynamic>? data,
+    required EndpointConfig endpointConfig,
+  }) async {
     final response = await _makeRequestWithRetry(
       url: url,
-      method: endpointConfig.method,
-      headers: requestHeaders,
+      method: method,
+      headers: headers,
       body: data,
       retryPolicy: endpointConfig.retryPolicy,
     );
@@ -107,9 +145,9 @@ class EnhancedApiService {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       final responseData = _parseResponse(response);
 
-      // Validate response schema
+      // JSON Schema validation with $ref support
       if (endpointConfig.responseSchema != null) {
-        _validateResponseData(responseData, endpointConfig.responseSchema!);
+        _validateResponseSchema(responseData, endpointConfig.responseSchema!);
       }
 
       // Cache response if enabled
@@ -129,11 +167,8 @@ class EnhancedApiService {
         fromCache: false,
       );
     } else {
-      final errorMessage = _getErrorMessage(
-        response.statusCode,
-        endpointConfig.errorCodes,
-      );
-      throw ApiException(errorMessage, statusCode: response.statusCode);
+      final message = _getErrorMessage(response.statusCode, endpointConfig.errorCodes);
+      throw ApiException(message, statusCode: response.statusCode);
     }
   }
 
@@ -149,66 +184,41 @@ class EnhancedApiService {
       _baseApiUrl ?? 'https://api.example.com',
     );
 
-    final uri = Uri.parse('$resolvedBaseUrl$path');
-
     // Build query parameters with validation
     final Map<String, String> finalParams = {};
 
     // Add configured default parameters
     if (paramConfigs != null) {
       for (final entry in paramConfigs.entries) {
-        final config = entry.value;
-        if (config.defaultValue != null) {
-          finalParams[entry.key] = config.defaultValue.toString();
+        final name = entry.key;
+        final cfg = entry.value;
+        final defaultValue = cfg.defaultValue;
+        if (defaultValue != null) {
+          finalParams[name] = defaultValue.toString();
         }
       }
     }
 
-    // Add provided parameters with validation
+    // Add provided parameters and validate
     if (queryParams != null) {
       for (final entry in queryParams.entries) {
-        if (entry.value != null) {
-          final paramConfig = paramConfigs?[entry.key];
-          if (paramConfig != null) {
-            _validateQueryParam(entry.key, entry.value, paramConfig);
-          }
-          finalParams[entry.key] = entry.value.toString();
+        final name = entry.key;
+        final value = entry.value;
+        final cfg = paramConfigs?[name];
+        if (cfg != null) {
+          _validateQueryParam(name, value, cfg);
         }
+        finalParams[name] = value.toString();
       }
     }
 
-    return uri
-        .replace(queryParameters: finalParams.isNotEmpty ? finalParams : null)
-        .toString();
+    final query = finalParams.isEmpty ? '' : '?${finalParams.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&')}';
+    return '$resolvedBaseUrl$path$query';
   }
 
-  Map<String, String> _buildHeaders(
-    EndpointConfig config,
-    Map<String, String>? additionalHeaders,
-  ) {
-    final headers = <String, String>{
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    };
-
-    // Add authentication if required
-    if (config.auth != null) {
-      if (config.auth == true || config.auth == 'bearer') {
-        final token = _authTokens['bearer'];
-        if (token != null) {
-          headers['Authorization'] = 'Bearer $token';
-        } else if (config.auth == true) {
-          throw ApiException('Authentication required but no token provided');
-        }
-      }
-    }
-
-    // Add additional headers
-    if (additionalHeaders != null) {
-      headers.addAll(additionalHeaders);
-    }
-
-    return headers;
+  String _dedupKey(String method, String url, Map<String, dynamic>? body) {
+    final bodyJson = body == null ? '' : json.encode(body);
+    return '$method::$url::$bodyJson';
   }
 
   Future<http.Response> _makeRequestWithRetry({
@@ -247,15 +257,15 @@ class EnhancedApiService {
               body: body != null ? json.encode(body) : null,
             );
             break;
-          case 'DELETE':
-            response = await http.delete(uri, headers: headers);
-            break;
           case 'PATCH':
             response = await http.patch(
               uri,
               headers: headers,
               body: body != null ? json.encode(body) : null,
             );
+            break;
+          case 'DELETE':
+            response = await http.delete(uri, headers: headers);
             break;
           default:
             throw ApiException('Unsupported HTTP method: $method');
@@ -311,106 +321,144 @@ class EnhancedApiService {
           throw ApiException('Parameter "$name" must be <= ${config.max}');
         }
         break;
-      case 'string':
-        final stringValue = value.toString();
-        if (config.minLength != null &&
-            stringValue.length < config.minLength!) {
-          throw ApiException(
-            'Parameter "$name" must be at least ${config.minLength} characters',
-          );
+      default:
+        if (config.minLength != null && value.toString().length < config.minLength!) {
+          throw ApiException('Parameter "$name" must be at least ${config.minLength} characters');
         }
-        if (config.enumValues != null &&
-            !config.enumValues!.contains(stringValue)) {
-          throw ApiException(
-            'Parameter "$name" must be one of: ${config.enumValues!.join(', ')}',
-          );
+        if (config.enumValues != null && !config.enumValues!.contains(value.toString())) {
+          throw ApiException('Parameter "$name" must be one of ${config.enumValues}');
         }
         break;
     }
   }
 
-  void _validateRequestData(
-    Map<String, dynamic> data,
-    Map<String, dynamic> schema,
-  ) {
-    // Basic JSON schema validation
-    if (schema['required'] is List) {
-      final required = List<String>.from(schema['required']);
-      for (final field in required) {
-        if (!data.containsKey(field) || data[field] == null) {
-          throw ApiException('Required field "$field" is missing');
+  void _validateResponseSchema(dynamic data, Map<String, dynamic> schema) {
+    // Supports: type, properties, required, items, $ref to dataModels
+    if (schema['type'] == 'object') {
+      if (data is! Map<String, dynamic>) {
+        throw ApiException('Response must be an object');
+      }
+      // Required fields
+      if (schema['required'] is List) {
+        final required = List<String>.from(schema['required']);
+        for (final field in required) {
+          if (!data.containsKey(field)) {
+            throw ApiException('Response missing required field "$field"');
+          }
         }
       }
-    }
-
-    if (schema['properties'] is Map) {
-      final properties = schema['properties'] as Map<String, dynamic>;
-      for (final entry in data.entries) {
-        final fieldSchema = properties[entry.key];
-        if (fieldSchema != null) {
-          _validateField(entry.key, entry.value, fieldSchema);
+      // Properties validation
+      if (schema['properties'] is Map<String, dynamic>) {
+        final props = schema['properties'] as Map<String, dynamic>;
+        for (final entry in props.entries) {
+          final key = entry.key;
+          final propSchema = Map<String, dynamic>.from(entry.value);
+          final value = data[key];
+          _validateValueAgainstSchema(key, value, propSchema);
         }
       }
     }
   }
 
-  void _validateResponseData(dynamic data, Map<String, dynamic> schema) {
-    // Basic response validation
-    if (data is Map<String, dynamic>) {
-      _validateRequestData(data, schema);
+  void _validateValueAgainstSchema(String key, dynamic value, Map<String, dynamic> schema) {
+    final type = schema['type'];
+    if (type == 'array') {
+      if (value is! List) {
+        throw ApiException('Field "$key" must be an array');
+      }
+      final items = schema['items'];
+      if (items is Map<String, dynamic>) {
+        final refPath = items[r'$ref'];
+        if (refPath is String && refPath.startsWith('#/dataModels/')) {
+          final modelName = refPath.substring('#/dataModels/'.length);
+          _validateArrayItemsAgainstModel(key, value, modelName);
+        } else if (items['type'] is String) {
+          for (final v in value) {
+            _validatePrimitiveType('$key[]', v, items['type']);
+          }
+        }
+      }
+    } else if (type is String) {
+      _validatePrimitiveType(key, value, type);
+    } else if (schema[r'$ref'] is String) {
+      final refPath = schema[r'$ref'] as String;
+      if (refPath.startsWith('#/dataModels/')) {
+        final modelName = refPath.substring('#/dataModels/'.length);
+        _validateObjectAgainstModel(key, value, modelName);
+      }
     }
   }
 
-  void _validateField(
-    String fieldName,
-    dynamic value,
-    Map<String, dynamic> fieldSchema,
-  ) {
-    final type = fieldSchema['type'];
-
+  void _validatePrimitiveType(String key, dynamic value, String type) {
     switch (type) {
       case 'string':
-        if (value is! String) {
-          throw ApiException('Field "$fieldName" must be a string');
-        }
-        if (fieldSchema['minLength'] != null &&
-            value.length < fieldSchema['minLength']) {
-          throw ApiException(
-            'Field "$fieldName" must be at least ${fieldSchema['minLength']} characters',
-          );
-        }
-        if (fieldSchema['maxLength'] != null &&
-            value.length > fieldSchema['maxLength']) {
-          throw ApiException(
-            'Field "$fieldName" must be at most ${fieldSchema['maxLength']} characters',
-          );
-        }
-        if (fieldSchema['format'] == 'email' && !_isValidEmail(value)) {
-          throw ApiException('Field "$fieldName" must be a valid email');
-        }
+        if (value is! String) throw ApiException('Field "$key" must be string');
         break;
-      case 'integer':
-        if (value is! int) {
-          throw ApiException('Field "$fieldName" must be an integer');
-        }
+      case 'number':
+        if (value is! num) throw ApiException('Field "$key" must be number');
         break;
-      case 'array':
-        if (value is! List) {
-          throw ApiException('Field "$fieldName" must be an array');
-        }
+      case 'boolean':
+        if (value is! bool) throw ApiException('Field "$key" must be boolean');
         break;
       case 'object':
-        if (value is! Map) {
-          throw ApiException('Field "$fieldName" must be an object');
-        }
+        if (value is! Map) throw ApiException('Field "$key" must be object');
+        break;
+      case 'array':
+        if (value is! List) throw ApiException('Field "$key" must be array');
+        break;
+      default:
         break;
     }
   }
 
-  bool _isValidEmail(String email) {
-    return RegExp(
-      r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
-    ).hasMatch(email);
+  void _validateArrayItemsAgainstModel(String key, List<dynamic> array, String modelName) {
+    final model = _contract?.dataModels[modelName];
+    if (model == null) return;
+    for (final item in array) {
+      _validateAgainstDataModel('$key[]', item, model);
+    }
+  }
+
+  void _validateObjectAgainstModel(String key, dynamic obj, String modelName) {
+    final model = _contract?.dataModels[modelName];
+    if (model == null) return;
+    _validateAgainstDataModel(key, obj, model);
+  }
+
+  void _validateAgainstDataModel(String key, dynamic obj, DataModel model) {
+    if (obj is! Map<String, dynamic>) {
+      throw ApiException('Field "$key" must be object matching model');
+    }
+    for (final entry in model.fields.entries) {
+      final fieldName = entry.key;
+      final cfg = entry.value;
+      if (cfg.required && !obj.containsKey(fieldName)) {
+        throw ApiException('Field "$key.$fieldName" is required');
+      }
+      final v = obj[fieldName];
+      if (v == null) continue;
+      switch (cfg.type) {
+        case 'string':
+          if (v is! String) throw ApiException('Field "$key.$fieldName" must be string');
+          if (cfg.minLength != null && v.length < cfg.minLength!) {
+            throw ApiException('Field "$key.$fieldName" minLength ${cfg.minLength}');
+          }
+          if (cfg.maxLength != null && v.length > cfg.maxLength!) {
+            throw ApiException('Field "$key.$fieldName" maxLength ${cfg.maxLength}');
+          }
+          break;
+        case 'number':
+        case 'int':
+        case 'double':
+          if (v is! num) throw ApiException('Field "$key.$fieldName" must be number');
+          break;
+        case 'boolean':
+          if (v is! bool) throw ApiException('Field "$key.$fieldName" must be boolean');
+          break;
+        default:
+          break;
+      }
+    }
   }
 
   String _getErrorMessage(int statusCode, Map<String, String>? errorCodes) {
@@ -431,13 +479,38 @@ class EnhancedApiService {
         return 'Too Many Requests';
       case 500:
         return 'Internal Server Error';
-      case 502:
-        return 'Bad Gateway';
-      case 503:
-        return 'Service Unavailable';
       default:
-        return 'Request failed with status $statusCode';
+        return 'Unexpected error ($statusCode)';
     }
+  }
+
+  Map<String, String> _buildHeaders(
+    EndpointConfig config,
+    Map<String, String>? additionalHeaders,
+  ) {
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+
+    // Add authentication if required
+    if (config.auth != null) {
+      if (config.auth == true || config.auth == 'bearer') {
+        final token = _authTokens['bearer'];
+        if (token != null) {
+          headers['Authorization'] = 'Bearer $token';
+        } else if (config.auth == true) {
+          throw ApiException('Authentication required but no token provided');
+        }
+      }
+    }
+
+    // Add additional headers
+    if (additionalHeaders != null) {
+      headers.addAll(additionalHeaders);
+    }
+
+    return headers;
   }
 
   CachedResponse? _getFromCache(String url) {
@@ -532,6 +605,21 @@ class ContractApiService {
     _apiService.initialize(contract);
   }
 
+  /// Set authentication token
+  void setAuthToken(String token) {
+    _apiService.setAuthToken(token);
+  }
+
+  /// Clear authentication token
+  void clearAuthToken() {
+    _apiService.clearAuthToken();
+  }
+
+  /// Clear cache
+  void clearCache() {
+    _apiService.clearCache();
+  }
+
   /// Make API call using service and endpoint names from contract
   Future<Map<String, dynamic>> call({
     required String service,
@@ -562,32 +650,32 @@ class ContractApiService {
     String? totalPath,
     String? pagePath,
   }) async {
-    final response = await call(
+    final response = await _apiService.call<Map<String, dynamic>>(
       service: service,
       endpoint: endpoint,
-      params: params,
+      queryParams: params,
     );
 
     // Extract list data using path
-    final listData = _extractByPath(response, listPath) as List? ?? [];
+    final listData = _extractByPath(response.data, listPath) as List? ?? [];
 
     // Extract pagination info
     int? total;
     int? currentPage;
 
     if (totalPath != null) {
-      total = _extractByPath(response, totalPath) as int?;
+      total = _extractByPath(response.data, totalPath) as int?;
     }
 
     if (pagePath != null) {
-      currentPage = _extractByPath(response, pagePath) as int?;
+      currentPage = _extractByPath(response.data, pagePath) as int?;
     }
 
     return PaginatedResponse(
-      data: listData,
+      data: List<dynamic>.from(listData),
       total: total,
       currentPage: currentPage,
-      rawResponse: response,
+      rawResponse: response.data,
     );
   }
 
@@ -601,21 +689,6 @@ class ContractApiService {
       }
     }
     return current;
-  }
-
-  /// Set authentication token
-  void setAuthToken(String token) {
-    _apiService.setAuthToken(token);
-  }
-
-  /// Clear authentication token
-  void clearAuthToken() {
-    _apiService.clearAuthToken();
-  }
-
-  /// Clear cache
-  void clearCache() {
-    _apiService.clearCache();
   }
 }
 
@@ -636,6 +709,7 @@ class PaginatedResponse {
   bool get hasMore {
     if (total == null || currentPage == null) return data.isNotEmpty;
     final pageSize = data.length;
+    if (pageSize == 0) return false;
     final totalPages = (total! / pageSize).ceil();
     return currentPage! < totalPages;
   }

@@ -4,6 +4,53 @@
 
 This framework implements a production-grade, JSON-driven application architecture where a single canonical JSON contract serves as the source of truth for data models, API contracts, UI rendering, business logic, state management, and deployment configuration.
 
+## Graph-Based Rendering Engine
+
+- The runtime maintains a DAG of dependencies among state, data sources, actions, and components.
+- Cycle detection prevents invalid dependencies.
+- Updates propagate using a topological order to only rerender affected subscribers.
+- Components subscribe via `GraphSubscriber(componentId, dependencies: [...])` and rebuild when their sources tick.
+
+## Centralized State
+
+- `EnhancedStateManager` provides global and page-scoped state.
+- Persistence policies: `local`, `secure`, `session`, `memory`.
+- Bind UI using `${state.key}` in component configs.
+- Undo/redo and optimistic updates:
+  - Use `ActionConfig { action: "updateState" }` or `apiCall` with `params.optimisticState`.
+  - Rollback occurs automatically if the `apiCall` fails.
+
+## Data Layer
+
+- Endpoints describe method, path, auth, params, caching, retry, and response schema.
+- Request deduplication merges concurrent identical calls.
+- Pagination:
+  - List components use `dataSource.pagination { enabled, totalPath, pagePath, autoLoad }`.
+  - `autoLoad` triggers fetching the next page when the footer is visible.
+- Response validation uses basic JSON Schema semantics from `responseSchema`.
+
+## Component Factory
+
+- Components are delegated to dedicated builders under `lib/widgets/components`.
+- Styles resolve theme tokens from `themingAccessibility.tokens`.
+- Registry validates required props and applies defaults.
+
+## Action System
+
+- Actions: navigate, pop, openUrl, apiCall, updateState, showError, showSuccess, submitForm, refreshData, showBottomSheet, showDialog, clearCache, undo, redo.
+- Middleware supports logging and can be extended for permissions and analytics.
+- Event bus emits `ActionStarted`, `ActionCompleted`, `ActionFailed` for instrumentation.
+
+## Validation
+
+- Field-level validation keys: `required`, `email`, `minLength`, `maxLength`, `pattern`, `message`.
+- Rule-based validations via `validations.rules`; cross-field rules via `validations.crossField`.
+
+## Development
+
+- Run `flutter pub get` then `flutter run` to launch on the iOS simulator.
+- Use `dart analyze` to keep the codebase lint-free.
+
 ## Architecture Principles
 
 ### Single Source of Truth

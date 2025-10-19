@@ -10,8 +10,9 @@ This parser implements a stable, comprehensive DSL. Author your `canonical_contr
   - `binding`: use `"${state.<key>}"` to render a state value
   - `onTap`, `onChanged`, `onSubmit`: action objects (see Actions)
 - onChanged behavior:
-  - Widgets forward `{'value': <newValue>}` to the action
+  - Widgets forward {'value': <newValue>} to the action
   - `searchBar` supports optional debounce via `onChanged.debounceMs`
+- Text inputs default to left-to-right in the demo; override direction in app UI if needed.
 
 ## Actions
 - Allowed `action` values:
@@ -44,9 +45,18 @@ This parser implements a stable, comprehensive DSL. Author your `canonical_contr
 - `eventsActions.onAppStart|onLogin|onLogout`: arrays of action objects from the allowed set
 
 ## Validation
-- The runtime validates:
+- Runtime contract validation:
   - Top-level sections are objects
   - Component `type` and action `action` values are supported
   - `state.*.persistence` is one of the allowed policies
+- Field input validation (components):
+  - Keys: `required`, `email`, `minLength`, `maxLength`, `pattern`, `message`
+  - Example:
+```json
+{ "type": "textField", "label": "Email", "validation": { "required": true, "email": true, "message": "Please enter a valid email" } }
+```
+- Rule-based validation:
+  - `validations.rules`: named rules reusable across fields
+  - `validations.crossField`: rules like `equal` for multi-field checks
 
 Author contracts within these boundaries to ensure the parser behaves consistently and predictably.

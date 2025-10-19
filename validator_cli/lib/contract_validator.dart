@@ -1,7 +1,3 @@
-library contract_validator;
-
-import 'dart:convert';
-
 class ValidationIssue {
   final String path;
   final String message;
@@ -307,7 +303,7 @@ class ContractValidator {
     // Component-specific hints
     if (type == 'image') {
       if (comp['src'] == null && comp['url'] == null && comp['text'] == null) {
-        warn('$path', 'Image missing src/url/text');
+        warn(path, 'Image missing src/url/text');
       }
       if (comp['text'] != null) {
         warn('$path.text', 'Prefer "src" (or "url") over "text" for image URLs');

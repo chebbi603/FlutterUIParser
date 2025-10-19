@@ -33,7 +33,7 @@
         "listPosts": {
           "path": "/posts",
           "method": "GET",
-          "responseSchema": { "data": "array" }
+          "responseSchema": { "type": "object", "properties": { "data": { "type": "array", "items": { "$ref": "#/dataModels/post" } } }, "required": ["data"] }
         }
       }
     }
@@ -154,7 +154,7 @@
         "children": [
           {
             "type": "image",
-            "text": "https://picsum.photos/200",
+            "src": "https://picsum.photos/200",
             "style": { "width": 150, "height": 150 }
           },
           { "type": "text", "text": "Name: John Doe" },
@@ -309,11 +309,12 @@
   },
   "state": {
     "global": {
-      "theme": { "type": "string", "default": "light" },
+      "theme": { "type": "string", "default": "light", "persistence": "local" },
       "welcomeMessage": {
         "type": "string",
         "default": "This message is bound from state."
-      }
+      },
+      "authToken": { "type": "string", "persistence": "secure" }
     },
     "pages": {}
   },
@@ -357,7 +358,35 @@
       "mapping": {
         "home": "CupertinoIcons.house",
         "person": "CupertinoIcons.person_circle",
-        "gear": "CupertinoIcons.gear"
+        "gear": "CupertinoIcons.gear",
+        "doc_text": "CupertinoIcons.doc_text",
+        "search": "CupertinoIcons.search",
+        "settings": "CupertinoIcons.settings",
+        "profile": "CupertinoIcons.person",
+        "menu": "CupertinoIcons.line_horizontal_3",
+        "close": "CupertinoIcons.xmark",
+        "check": "CupertinoIcons.checkmark",
+        "arrow_left": "CupertinoIcons.chevron_left",
+        "arrow_right": "CupertinoIcons.chevron_right",
+        "arrow_up": "CupertinoIcons.chevron_up",
+        "arrow_down": "CupertinoIcons.chevron_down",
+        "edit": "CupertinoIcons.pencil",
+        "delete": "CupertinoIcons.delete",
+        "share": "CupertinoIcons.share",
+        "favorite": "CupertinoIcons.heart",
+        "info": "CupertinoIcons.info",
+        "warning": "CupertinoIcons.exclamationmark_triangle",
+        "calendar": "CupertinoIcons.calendar",
+        "location": "CupertinoIcons.location",
+        "mail": "CupertinoIcons.mail",
+        "camera": "CupertinoIcons.camera",
+        "play": "CupertinoIcons.play_fill",
+        "pause": "CupertinoIcons.pause_fill",
+        "plus": "CupertinoIcons.plus",
+        "minus": "CupertinoIcons.minus",
+        "download": "CupertinoIcons.arrow_down_to_line",
+        "upload": "CupertinoIcons.arrow_up_to_line",
+        "filter": "CupertinoIcons.line_horizontal_3_decrease"
       }
     },
     "images": {},
@@ -366,7 +395,7 @@
   },
   "validations": {
     "rules": {
-      "nonEmpty": { "notEmpty": true, "message": "Field cannot be empty" }
+      "requiredRule": { "required": true, "message": "Field cannot be empty" }
     },
     "crossField": {}
   },

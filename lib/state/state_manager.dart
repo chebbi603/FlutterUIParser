@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import '../models/config_models.dart';
 import '../persistence/state_persistence.dart';
 import '../utils/parsing_utils.dart';
+import '../engine/graph_engine.dart';
 
 /// Enhanced state manager with persistence and scoped state
 class EnhancedStateManager extends ChangeNotifier {
@@ -14,6 +15,10 @@ class EnhancedStateManager extends ChangeNotifier {
   final Map<String, Map<String, dynamic>> _pageState = {};
   final Map<String, dynamic> _sessionState = {};
   final Map<String, dynamic> _memoryState = {};
+
+  // Undo/redo stacks per state path
+  final Map<String, List<dynamic>> _history = {};
+  final Map<String, List<dynamic>> _redo = {};
 
   StateConfig? _config;
   bool _hydrated = false;
@@ -151,11 +156,17 @@ class EnhancedStateManager extends ChangeNotifier {
 
   /// Set global state value
   Future<void> setGlobalState(String key, dynamic value) async {
+    // Push previous value to history
+    final prev = _globalState.containsKey(key) ? _globalState[key] : null;
+    _history.putIfAbsent(key, () => <dynamic>[]).add(prev);
+    _redo[key]?.clear();
+
     _globalState[key] = value;
     final fieldConfig = _config?.global[key];
     if (fieldConfig != null) {
       await _writeByPolicy(fieldConfig.persistence, _globalStorageKey(key), value);
     }
+    GraphEngine().notifyStateChange(key);
     notifyListeners();
   }
 
@@ -167,11 +178,18 @@ class EnhancedStateManager extends ChangeNotifier {
   /// Set page state value
   Future<void> setPageState(String pageId, String key, dynamic value) async {
     _pageState[pageId] ??= {};
+    // Push previous value to history with namespaced path
+    final path = '$pageId.$key';
+    final prev = _pageState[pageId]!.containsKey(key) ? _pageState[pageId]![key] : null;
+    _history.putIfAbsent(path, () => <dynamic>[]).add(prev);
+    _redo[path]?.clear();
+
     _pageState[pageId]![key] = value;
     final fieldConfig = _config?.pages[pageId]?[key];
     if (fieldConfig != null) {
       await _writeByPolicy(fieldConfig.persistence, _pageStorageKey(pageId, key), value);
     }
+    GraphEngine().notifyStateChange(path);
     notifyListeners();
   }
 
@@ -211,6 +229,7 @@ class EnhancedStateManager extends ChangeNotifier {
   /// Set session state (memory only)
   void setSessionState(String key, dynamic value) {
     _sessionState[key] = value;
+    GraphEngine().notifyStateChange('session.$key');
     notifyListeners();
   }
 
@@ -222,6 +241,7 @@ class EnhancedStateManager extends ChangeNotifier {
   /// Set memory state (temporary)
   void setMemoryState(String key, dynamic value) {
     _memoryState[key] = value;
+    GraphEngine().notifyStateChange('memory.$key');
     notifyListeners();
   }
 
@@ -252,5 +272,27 @@ class EnhancedStateManager extends ChangeNotifier {
   /// Get all page state for a specific page
   Map<String, dynamic> getAllPageState(String pageId) {
     return Map.from(_pageState[pageId] ?? {});
+  }
+
+  /// Undo the last change for a state path (global or page)
+  Future<void> undoState(String path) async {
+    final stack = _history[path];
+    if (stack == null || stack.isEmpty) return;
+    final prev = stack.removeLast();
+    // Keep current value for redo
+    final current = getState(path);
+    _redo.putIfAbsent(path, () => <dynamic>[]).add(current);
+    await setState(path, prev);
+  }
+
+  /// Redo the last undone change for a state path
+  Future<void> redoState(String path) async {
+    final stack = _redo[path];
+    if (stack == null || stack.isEmpty) return;
+    final next = stack.removeLast();
+    // Push current to history
+    final current = getState(path);
+    _history.putIfAbsent(path, () => <dynamic>[]).add(current);
+    await setState(path, next);
   }
 }

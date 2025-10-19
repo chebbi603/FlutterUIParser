@@ -145,7 +145,7 @@ class ContractValidator {
 
     // Validate actions and components recursively across JSON
     void scan(Object? node, String path) {
-      bool isUnder(String section) => path.startsWith('root.' + section) || path.contains('.' + section + '.');
+      bool isUnder(String section) => path.startsWith('root.$section') || path.contains('.$section.');
       final underPagesUI = isUnder('pagesUI');
       final underEvents = isUnder('eventsActions');
 

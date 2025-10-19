@@ -10,6 +10,7 @@ import 'state/state_manager.dart';
 import 'services/api_service.dart';
 import 'permissions/permission_manager.dart';
 import 'navigation/navigation_bridge.dart';
+import 'utils/parsing_utils.dart';
 
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
@@ -279,8 +280,11 @@ class _MyAppState extends State<MyApp> {
             _parseColor(bottomNav.style?.color) ?? CupertinoColors.inactiveGray,
         items:
             bottomNav.items.map((item) {
+              // Resolve icon via contract mapping or fallback
+              final mapped = contract!.assets.icons[item.icon];
+              final iconData = ParsingUtils.parseIcon(mapped ?? item.icon);
               return BottomNavigationBarItem(
-                icon: Icon(_parseIcon(item.icon)),
+                icon: Icon(iconData),
                 label: item.title,
               );
             }).toList(),
@@ -364,38 +368,5 @@ class _MyAppState extends State<MyApp> {
       }
     }
     return null;
-  }
-
-  IconData _parseIcon(String iconName) {
-    // Use contract icon mapping
-    final iconMapping = contract!.assets.icons[iconName];
-    if (iconMapping != null && iconMapping.startsWith('CupertinoIcons.')) {
-      return _getCupertinoIcon(iconMapping.substring(15));
-    }
-
-    return _getCupertinoIcon(iconName);
-  }
-
-  IconData _getCupertinoIcon(String name) {
-    switch (name) {
-      case 'house':
-        return CupertinoIcons.house;
-      case 'doc_text':
-        return CupertinoIcons.doc_text;
-      case 'person_circle':
-        return CupertinoIcons.person_circle;
-      case 'gear':
-        return CupertinoIcons.gear;
-      case 'plus':
-        return CupertinoIcons.plus;
-      case 'ellipsis':
-        return CupertinoIcons.ellipsis;
-      case 'chart_bar':
-        return CupertinoIcons.chart_bar;
-      case 'exclamationmark_triangle':
-        return CupertinoIcons.exclamationmark_triangle;
-      default:
-        return CupertinoIcons.circle;
-    }
   }
 }

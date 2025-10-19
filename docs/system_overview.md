@@ -116,27 +116,67 @@ or
 - Interactive controls feel responsive out of the box
 - Aliases improve compatibility with different JSON schemas
 
+## Graph Engine (DAG)
+
+- Nodes represent components, state keys, data sources, and actions.
+- Directed edges model dependencies; cycle detection prevents loops.
+- Topological ordering ensures updates propagate in dependency order.
+- Lazy evaluation: only visible components receive ticks; lists fetch when first visible.
+
+## State Architecture
+
+- Centralized `EnhancedStateManager` injected via Provider (`ChangeNotifierProvider`).
+- Scoped state: global and page state with persistence policies (`local`, `secure`, `session`, `memory`).
+- Reactive bindings: `${state.key}` resolved and subscribed via `GraphSubscriber`.
+- Undo/redo: per-key history stacks with `undo`/`redo` actions.
+- Optimistic updates: API calls can apply `params.optimisticState` and roll back on failure.
+
+## Data Layer
+
+- Each API endpoint is configured with method, params, caching, and retry policy.
+- Request deduplication: concurrent identical calls are coalesced.
+- Pagination: list components manage `currentPage`/`hasMore` and optional `autoLoad` for infinite scroll.
+- Response validation: basic JSON Schema checks via endpoint `responseSchema`.
+
+## Component Factory
+
+- Delegated builders per component (text, textField, button, icon, switch, slider, etc.).
+- Registry with metadata validates required props and applies defaults.
+- Theme token resolution for `style.color` and backgrounds.
+- Memoization applied to pure components to reduce rebuilds.
+
+## Action System
+
+- 12+ actions including navigation, openUrl, apiCall, updateState, submitForm.
+- Middleware pipeline supports logging; extendable for analytics and permissions.
+- Async loading states via `params.loadingKey` toggling state.
+- Event bus for loose coupling and action lifecycle events.
+- New actions: `undo`, `redo` for reversible state changes.
+
 ## Pain Points / Limitations
 
-- Local state is ephemeral; values are not persisted or propagated to a global state/store
-- No built‑in form validation, submission, or error states
-- Theming (light/dark, brand colors) is basic; no global theme config yet
 - `stack` lacks child positioning (`Positioned` from JSON not supported yet)
 - Limited icon set; `ParsingUtils.parseIcon` maps a small subset
 - Color parsing is permissive but defaults may surprise (e.g., unnamed → blue)
 - `margin` currently supports a single number; per‑edge margins not implemented
-- Performance can degrade with very large trees using many `StatefulBuilder`s
-- Accessibility/semantics not explicitly modeled in the JSON
 
 ## Extending the System
 
 1. Add new types in `ComponentFactory.createComponent` and implement a builder method.
 2. Extend `ComponentConfig` and update `fromJson` to parse new properties.
-3. Use `_withStyle` so styling remains consistent.
+3. Use style helpers so styling remains consistent.
 4. Consider adding `id` and `onChanged`/`events` if the component is interactive.
 
 ## Development Tips
 
-- Use hot reload while editing `assets/config.json`.
-- Keep layouts shallow where possible; prefer `flex` with `spacing` over many nested containers.
-- If adding persistence, centralize state in a provider or BLoC and pass callbacks to builders.
+- Use hot reload while editing `assets/canonical_contract.json`.
+- Keep layouts shallow; prefer `row`/`column` with `spacing` over many nested containers.
+- Validate with `dart analyze` and run on the iOS simulator (`flutter run`).
+
+## Recent Updates
+
+- Text inputs default to `TextDirection.ltr` and show inline validation.
+- Icon and chip rendering uses memoization to reduce rebuild overhead.
+- Actions and state updates propagate consistently through binding and `updateState`.
+- Performance: graph engine adds ordered propagation and lazy evaluation.
+- Accessibility: enhanced error styling for inputs using theme `error` color.
