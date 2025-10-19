@@ -1,0 +1,396 @@
+{
+  "meta": {
+    "appName": "Demo Canonical App",
+    "version": "1.0.0",
+    "schemaVersion": "1.0.0",
+    "generatedAt": "2025-10-15T10:00:00Z",
+    "authors": ["Demo"],
+    "description": "Dummy contract for parser validation and UI smoke test"
+  },
+  "dataModels": {
+    "post": {
+      "fields": {
+        "id": { "type": "string", "required": true },
+        "title": { "type": "string", "required": true },
+        "imageUrl": { "type": "string" },
+        "body": { "type": "string" },
+        "publishedAt": { "type": "string" }
+      }
+    },
+    "user": {
+      "fields": {
+        "id": { "type": "string", "required": true },
+        "name": { "type": "string" },
+        "avatarUrl": { "type": "string" }
+      }
+    }
+  },
+  "services": {
+    "demo": {
+      "baseUrl": "https://api.example.com",
+      "endpoints": {
+        "ping": { "path": "/ping", "method": "GET" },
+        "listPosts": {
+          "path": "/posts",
+          "method": "GET",
+          "responseSchema": { "data": "array" }
+        }
+      }
+    }
+  },
+  "pagesUI": {
+    "routes": {
+      "/": { "pageId": "home" },
+      "/profile": { "pageId": "profile" },
+      "/form": { "pageId": "form" }
+    },
+    "bottomNavigation": {
+      "enabled": true,
+      "initialIndex": 0,
+      "items": [
+        { "pageId": "home", "title": "Home", "icon": "home" },
+        { "pageId": "profile", "title": "Profile", "icon": "person" },
+        { "pageId": "form", "title": "Form", "icon": "doc_text" }
+      ]
+    },
+    "pages": {
+      "home": {
+        "id": "home",
+        "title": "Home",
+        "layout": "scroll",
+        "navigationBar": { "title": "Demo Home" },
+        "children": [
+          {
+            "type": "hero",
+            "style": {
+              "padding": 16,
+              "backgroundColor": "${theme.surface}",
+              "borderRadius": 12
+            },
+            "children": [
+              {
+                "type": "text",
+                "text": "Welcome to the Demo Canonical App",
+                "style": {
+                  "fontSize": 20,
+                  "fontWeight": "bold",
+                  "color": "${theme.onSurface}"
+                }
+              },
+              {
+                "type": "text",
+                "text": "This contract validates and renders components.",
+                "style": { "color": "${theme.onSurfaceVariant}" }
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "binding": "${state.welcomeMessage}",
+            "style": { "color": "${theme.primary}" }
+          },
+          {
+            "type": "row",
+            "spacing": 8,
+            "children": [
+              {
+                "type": "chip",
+                "text": "New",
+                "style": {
+                  "backgroundColor": "#EEF2FF",
+                  "foregroundColor": "#1F2937"
+                }
+              },
+              {
+                "type": "chip",
+                "text": "Featured",
+                "style": {
+                  "backgroundColor": "#E8F5E9",
+                  "foregroundColor": "#1F2937"
+                }
+              }
+            ]
+          },
+          {
+            "type": "button",
+            "text": "Show Dialog",
+            "style": {
+              "backgroundColor": "#0066CC",
+              "foregroundColor": "#FFFFFF",
+              "padding": { "horizontal": 16, "vertical": 12 },
+              "borderRadius": 8
+            },
+            "onTap": {
+              "action": "showDialog",
+              "params": {
+                "title": "Hello",
+                "message": "Parser works! UI rendered from JSON."
+              }
+            }
+          },
+          {
+            "type": "textField",
+            "id": "email",
+            "label": "Email",
+            "placeholder": "name@example.com",
+            "validation": {
+              "email": true,
+              "required": true,
+              "message": "Please enter a valid email"
+            }
+          },
+          {
+            "type": "textButton",
+            "text": "Go to Profile",
+            "onTap": { "action": "navigate", "route": "/profile" }
+          }
+        ]
+      },
+      "profile": {
+        "id": "profile",
+        "title": "Profile",
+        "layout": "column",
+        "navigationBar": { "title": "Profile" },
+        "children": [
+          {
+            "type": "image",
+            "text": "https://picsum.photos/200",
+            "style": { "width": 150, "height": 150 }
+          },
+          { "type": "text", "text": "Name: John Doe" },
+          {
+            "type": "icon",
+            "name": "person_circle",
+            "size": 32,
+            "style": { "color": "${theme.primary}" }
+          },
+          {
+            "type": "textButton",
+            "text": "Open Website",
+            "onTap": {
+              "action": "openUrl",
+              "params": { "url": "https://example.com" }
+            }
+          }
+        ]
+      },
+      "form": {
+        "id": "form",
+        "title": "Form",
+        "layout": "scroll",
+        "navigationBar": { "title": "Form" },
+        "children": [
+          {
+            "type": "hero",
+            "style": {
+              "padding": 16,
+              "backgroundColor": "${theme.surface}",
+              "borderRadius": 12
+            },
+            "children": [
+              {
+                "type": "text",
+                "text": "Form Demo",
+                "style": { "fontSize": 20, "fontWeight": "bold" }
+              },
+              {
+                "type": "text",
+                "text": "Fill out the fields and submit to see the values.",
+                "style": { "color": "${theme.onSurfaceVariant}" }
+              }
+            ]
+          },
+          {
+            "type": "form",
+            "style": {
+              "padding": { "horizontal": 16, "vertical": 8 },
+              "backgroundColor": "${theme.surface}",
+              "borderRadius": 8
+            },
+            "children": [
+              {
+                "type": "textField",
+                "id": "fullName",
+                "label": "Full Name",
+                "placeholder": "Jane Doe",
+                "validation": {
+                  "required": true,
+                  "message": "Name is required"
+                },
+                "onChanged": {
+                  "action": "updateState",
+                  "params": { "key": "form.fullName" }
+                }
+              },
+              {
+                "type": "textField",
+                "id": "email",
+                "label": "Email",
+                "placeholder": "you@example.com",
+                "validation": {
+                  "email": true,
+                  "required": true,
+                  "message": "Valid email required"
+                },
+                "onChanged": {
+                  "action": "updateState",
+                  "params": { "key": "form.email" }
+                }
+              },
+              {
+                "type": "textField",
+                "id": "password",
+                "label": "Password",
+                "placeholder": "••••••",
+                "obscureText": true,
+                "validation": {
+                  "required": true,
+                  "minLength": 6,
+                  "message": "Min 6 characters"
+                },
+                "onChanged": {
+                  "action": "updateState",
+                  "params": { "key": "form.password" }
+                }
+              },
+              {
+                "type": "textField",
+                "id": "bio",
+                "label": "Bio",
+                "placeholder": "Tell us about yourself...",
+                "maxLines": 4,
+                "onChanged": {
+                  "action": "updateState",
+                  "params": { "key": "form.bio" }
+                }
+              },
+              {
+                "type": "row",
+                "mainAxisAlignment": "spaceBetween",
+                "crossAxisAlignment": "center",
+                "children": [
+                  { "type": "text", "text": "Subscribe to newsletter" },
+                  {
+                    "type": "switch",
+                    "onChanged": {
+                      "action": "updateState",
+                      "params": { "key": "form.subscribe" }
+                    }
+                  }
+                ]
+              },
+              { "type": "text", "text": "Satisfaction", "style": { "color": "${theme.onSurfaceVariant}" } },
+              {
+                "type": "slider",
+                "onChanged": {
+                  "action": "updateState",
+                  "params": { "key": "form.satisfaction" }
+                }
+              },
+              {
+                "type": "button",
+                "text": "Submit",
+                "style": {
+                  "backgroundColor": "${theme.primary}",
+                  "foregroundColor": "#FFFFFF",
+                  "padding": { "horizontal": 16, "vertical": 12 },
+                  "borderRadius": 8
+                },
+                "onTap": {
+                  "action": "submitForm",
+                  "params": { "formId": "form" }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "state": {
+    "global": {
+      "theme": { "type": "string", "default": "light" },
+      "welcomeMessage": {
+        "type": "string",
+        "default": "This message is bound from state."
+      }
+    },
+    "pages": {}
+  },
+  "eventsActions": {
+    "onAppStart": [
+      { "action": "showSuccess", "params": { "message": "Contract loaded" } }
+    ],
+    "actions": {}
+  },
+  "themingAccessibility": {
+    "tokens": {
+      "light": {
+        "primary": "#0A84FF",
+        "onSurface": "#1C1C1E",
+        "onSurfaceVariant": "#8E8E93",
+        "surface": "#FFFFFF",
+        "error": "#FF453A"
+      },
+      "dark": {
+        "primary": "#0A84FF",
+        "onSurface": "#F2F2F7",
+        "onSurfaceVariant": "#8E8E93",
+        "surface": "#1C1C1E",
+        "error": "#FF453A"
+      }
+    },
+    "typography": {
+      "body": { "fontSize": 16, "fontWeight": "regular", "lineHeight": 1.4 }
+    },
+    "accessibility": {
+      "minimumTouchTarget": 44,
+      "contrastRatio": 4.5,
+      "semanticLabels": {},
+      "voiceOverSupport": true,
+      "dynamicType": true,
+      "reduceMotion": true
+    }
+  },
+  "assets": {
+    "icons": {
+      "mapping": {
+        "home": "CupertinoIcons.house",
+        "person": "CupertinoIcons.person_circle",
+        "gear": "CupertinoIcons.gear"
+      }
+    },
+    "images": {},
+    "fonts": {},
+    "lazyLoading": { "enabled": true }
+  },
+  "validations": {
+    "rules": {
+      "nonEmpty": { "notEmpty": true, "message": "Field cannot be empty" }
+    },
+    "crossField": {}
+  },
+  "permissionsFlags": {
+    "roles": { "guest": { "permissions": [] } },
+    "featureFlags": { "newUI": { "enabled": true, "rolloutPercentage": 100 } }
+  },
+  "pagination": {
+    "defaults": {
+      "pageSize": 20,
+      "maxPageSize": 100,
+      "pageParam": "page",
+      "sizeParam": "limit"
+    },
+    "sorting": {
+      "defaults": {
+        "sortParam": "sortBy",
+        "orderParam": "sortOrder",
+        "defaultSort": "createdAt",
+        "defaultOrder": "desc"
+      }
+    },
+    "filtering": {
+      "operators": { "eq": "=", "ne": "!=", "gt": ">", "lt": "<" }
+    }
+  }
+}
