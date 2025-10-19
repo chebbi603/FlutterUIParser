@@ -1,0 +1,257 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/canonical_contract.schema.json",
+  "title": "Canonical Contract Schema",
+  "type": "object",
+  "required": [
+    "meta",
+    "pagesUI"
+  ],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["appName", "version", "schemaVersion"],
+      "properties": {
+        "appName": { "type": "string" },
+        "version": { "type": "string" },
+        "schemaVersion": { "type": "string" },
+        "generatedAt": { "type": "string", "format": "date-time" },
+        "authors": { "type": "array", "items": { "type": "string" } },
+        "description": { "type": "string" }
+      }
+    },
+    "dataModels": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "fields": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "required": ["type"],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": ["string", "number", "integer", "boolean", "datetime", "object", "array"]
+                },
+                "required": { "type": "boolean" },
+                "primaryKey": { "type": "boolean" },
+                "enum": { "type": "array" }
+              }
+            }
+          },
+          "relationships": { "type": "object" },
+          "indexes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "fields": { "type": "array", "items": { "type": "string" } },
+                "unique": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "services": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["baseUrl", "endpoints"],
+        "properties": {
+          "baseUrl": { "type": "string" },
+          "endpoints": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "required": ["path", "method"],
+              "properties": {
+                "path": { "type": "string" },
+                "method": { "type": "string", "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"] },
+                "auth": { "type": "boolean" },
+                "requestSchema": { "type": "object" },
+                "responseSchema": { "type": "object" },
+                "caching": {
+                  "type": "object",
+                  "properties": { "enabled": { "type": "boolean" } }
+                },
+                "retryPolicy": {
+                  "type": "object",
+                  "properties": {
+                    "maxAttempts": { "type": "integer", "minimum": 0 },
+                    "backoffMs": { "type": "integer", "minimum": 0 }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "pagesUI": {
+      "type": "object",
+      "required": ["pages"],
+      "properties": {
+        "routes": { "type": "object" },
+        "bottomNavigation": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "initialIndex": { "type": "integer", "minimum": 0 },
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["pageId", "title"],
+                "properties": {
+                  "pageId": { "type": "string" },
+                  "title": { "type": "string" },
+                  "icon": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "pages": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Page"
+          }
+        }
+      }
+    },
+    "state": {
+      "type": "object",
+      "properties": {
+        "global": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/StateField" }
+        },
+        "pages": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#/$defs/StateField" }
+          }
+        }
+      }
+    },
+    "eventsActions": {
+      "type": "object",
+      "properties": {
+        "onAppStart": { "type": "array", "items": { "$ref": "#/$defs/Action" } },
+        "onLogin": { "type": "array", "items": { "$ref": "#/$defs/Action" } },
+        "onLogout": { "type": "array", "items": { "$ref": "#/$defs/Action" } }
+      }
+    },
+    "themingAccessibility": { "type": "object" },
+    "assets": { "type": "object" },
+    "validations": { "type": "object" },
+    "permissionsFlags": { "type": "object" },
+    "pagination": { "type": "object" }
+  },
+  "$defs": {
+    "Layout": {
+      "type": "string",
+      "enum": ["scroll", "column", "row", "center", "grid", "list", "hero"]
+    },
+    "ComponentType": {
+      "type": "string",
+      "enum": [
+        "text", "textField", "button", "textButton", "iconButton", "icon", "image",
+        "card", "list", "grid", "row", "column", "center", "hero", "form",
+        "searchBar", "chip", "progressIndicator", "switch", "slider", "audio", "video", "webview"
+      ]
+    },
+    "ActionType": {
+      "type": "string",
+      "enum": [
+        "navigate", "pop", "openUrl", "apiCall", "updateState", "showError",
+        "showSuccess", "submitForm", "refreshData", "showBottomSheet", "showDialog", "clearCache"
+      ]
+    },
+    "StatePersistence": {
+      "type": "string",
+      "enum": ["memory", "session", "local", "secure"]
+    },
+    "Style": {
+      "type": "object",
+      "properties": {
+        "padding": { "type": ["number", "object"] },
+        "margin": { "type": ["number", "object"] },
+        "backgroundColor": { "type": "string" },
+        "color": { "type": "string" },
+        "borderColor": { "type": "string" },
+        "borderWidth": { "type": "number" },
+        "borderRadius": { "type": "number" },
+        "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
+        "alignment": { "type": "string" },
+        "width": { "type": "number" },
+        "height": { "type": "number" },
+        "elevation": { "type": "number" }
+      },
+      "additionalProperties": true
+    },
+    "Action": {
+      "type": "object",
+      "required": ["action"],
+      "properties": {
+        "action": { "$ref": "#/$defs/ActionType" },
+        "route": { "type": "string" },
+        "service": { "type": "string" },
+        "endpoint": { "type": "string" },
+        "params": { "type": "object" },
+        "onSuccess": { "$ref": "#/$defs/Action" },
+        "onError": { "$ref": "#/$defs/Action" },
+        "key": { "type": "string" },
+        "value": {}
+      },
+      "additionalProperties": true
+    },
+    "Component": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "$ref": "#/$defs/ComponentType" },
+        "text": { "type": ["string", "number", "boolean"] },
+        "label": { "type": "string" },
+        "placeholder": { "type": "string" },
+        "binding": { "type": "string" },
+        "style": { "$ref": "#/$defs/Style" },
+        "children": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Component" }
+        },
+        "onTap": { "$ref": "#/$defs/Action" },
+        "onChanged": { "$ref": "#/$defs/Action" },
+        "onSubmit": { "$ref": "#/$defs/Action" },
+        "permissions": { "type": "array", "items": { "type": "string" } },
+        "validation": { "type": "object" }
+      },
+      "additionalProperties": true
+    },
+    "Page": {
+      "type": "object",
+      "required": ["id", "title", "layout", "children"],
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "layout": { "$ref": "#/$defs/Layout" },
+        "navigationBar": { "type": "object", "properties": { "title": { "type": "string" } } },
+        "children": { "type": "array", "items": { "$ref": "#/$defs/Component" } }
+      }
+    },
+    "StateField": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string", "enum": ["string", "number", "boolean", "object", "array"] },
+        "default": {},
+        "persistence": { "$ref": "#/$defs/StatePersistence" }
+      }
+    }
+  }
+}

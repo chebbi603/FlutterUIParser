@@ -145,16 +145,20 @@ class ContractValidator {
 
     // Validate actions and components recursively across JSON
     void scan(Object? node, String path) {
+      bool isUnder(String section) => path.startsWith('root.' + section) || path.contains('.' + section + '.');
+      final underPagesUI = isUnder('pagesUI');
+      final underEvents = isUnder('eventsActions');
+
       if (node is Map) {
-        // Component type
-        if (node.containsKey('type') && node['type'] is String) {
+        // Component type (only validate inside pagesUI subtree)
+        if (underPagesUI && node.containsKey('type') && node['type'] is String) {
           final type = node['type'] as String;
           if (type.isNotEmpty && !allowedComponents.contains(type)) {
             errors.add("Unsupported component type '$type' at $path.type");
           }
         }
-        // Action name
-        if (node.containsKey('action') && node['action'] is String) {
+        // Action name (validate inside pagesUI and eventsActions subtrees)
+        if ((underPagesUI || underEvents) && node.containsKey('action') && node['action'] is String) {
           final action = node['action'] as String;
           if (action.isNotEmpty && !allowedActions.contains(action)) {
             errors.add("Unsupported action '$action' at $path.action");
