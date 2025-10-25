@@ -1,28 +1,84 @@
 import 'package:flutter/cupertino.dart';
 import '../models/config_models.dart';
 import 'component_factory.dart';
+import '../analytics/services/analytics_service.dart';
+import '../analytics/models/tracking_event.dart';
+import '../analytics/widgets/component_tracker.dart';
 
 /// Enhanced page builder with advanced layout and navigation support
-class EnhancedPageBuilder extends StatelessWidget {
+class EnhancedPageBuilder extends StatefulWidget {
   final EnhancedPageConfig config;
+  final Set<String> trackedIds;
 
-  const EnhancedPageBuilder({super.key, required this.config});
+  const EnhancedPageBuilder({super.key, required this.config, required this.trackedIds});
+
+  @override
+  State<EnhancedPageBuilder> createState() => _EnhancedPageBuilderState();
+}
+
+class _EnhancedPageBuilderState extends State<EnhancedPageBuilder> {
+  final AnalyticsService _analytics = AnalyticsService();
+
+  @override
+  void initState() {
+    super.initState();
+    // Track page entry
+    _trackPageEntry();
+  }
+
+  @override
+  void dispose() {
+    // Track page exit
+    _trackPageExit();
+    super.dispose();
+  }
+
+  void _trackPageEntry() {
+    _analytics.trackPageNavigation(
+      pageId: widget.config.id,
+      eventType: TrackingEventType.pageEnter,
+    );
+  }
+
+  void _trackPageExit() {
+    _analytics.trackPageNavigation(
+      pageId: widget.config.id,
+      eventType: TrackingEventType.pageExit,
+    );
+  }
+
+  /// Create component and wrap with ComponentTracker when ID is tracked
+  Widget _createTrackedComponent(EnhancedComponentConfig config) {
+    final child = EnhancedComponentFactory.createComponent(config);
+
+    final id = config.id;
+    if (id != null && widget.trackedIds.contains(id)) {
+      return ComponentTracker(
+        componentId: id,
+        componentType: config.type,
+        pageId: widget.config.id,
+        child: child,
+      );
+    }
+
+    return child;
+  }
 
   @override
   Widget build(BuildContext context) {
     Widget body = _buildBody();
 
     // Apply page-level styling
-    if (config.style != null) {
+    if (widget.config.style != null) {
       body = Container(
-        color: _parseColor(config.style!.backgroundColor),
-        padding: config.style!.padding?.toEdgeInsets(),
+        color: _parseColor(widget.config.style!.backgroundColor),
+        padding: widget.config.style!.padding?.toEdgeInsets(),
         child: body,
       );
     }
 
     // Wrap with navigation bar if configured
-    if (config.navigationBar != null) {
+    if (widget.config.navigationBar != null) {
       return CupertinoPageScaffold(
         navigationBar: _buildNavigationBar(),
         child: SafeArea(child: body),
@@ -33,7 +89,7 @@ class EnhancedPageBuilder extends StatelessWidget {
   }
 
   CupertinoNavigationBar _buildNavigationBar() {
-    final navBar = config.navigationBar!;
+    final navBar = widget.config.navigationBar!;
 
     return CupertinoNavigationBar(
       middle: Text(navBar.title),
@@ -45,7 +101,7 @@ class EnhancedPageBuilder extends StatelessWidget {
                     navBar.actions!
                         .map(
                           (action) =>
-                              EnhancedComponentFactory.createComponent(action),
+                              _createTrackedComponent(action),
                         )
                         .toList(),
               )
@@ -55,11 +111,11 @@ class EnhancedPageBuilder extends StatelessWidget {
 
   Widget _buildBody() {
     final children =
-        config.children
-            .map((child) => EnhancedComponentFactory.createComponent(child))
+        widget.config.children
+            .map((child) => _createTrackedComponent(child))
             .toList();
 
-    switch (config.layout.toLowerCase()) {
+    switch (widget.config.layout.toLowerCase()) {
       case 'scroll':
         return _buildScrollLayout(children);
       case 'center':

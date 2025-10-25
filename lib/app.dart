@@ -5,12 +5,14 @@ import 'package:provider/provider.dart';
 import 'models/config_models.dart';
 import 'validation/contract_validator.dart';
 import 'widgets/component_factory.dart';
-import 'widgets/page_builder.dart';
+import 'widgets/enhanced_page_builder.dart';
 import 'state/state_manager.dart';
 import 'services/api_service.dart';
 import 'permissions/permission_manager.dart';
 import 'navigation/navigation_bridge.dart';
 import 'utils/parsing_utils.dart';
+
+import 'analytics/services/analytics_service.dart';
 
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
@@ -29,6 +31,7 @@ class _MyAppState extends State<MyApp> {
   final ContractApiService apiService = ContractApiService();
   final PermissionManager permissionManager = PermissionManager();
   CupertinoTabController? _tabController;
+  Set<String> _trackedIds = {};
 
   @override
   void initState() {
@@ -73,6 +76,12 @@ class _MyAppState extends State<MyApp> {
       apiService.initialize(loadedContract);
       permissionManager.initialize(loadedContract.permissionsFlags);
       EnhancedComponentFactory.initialize(loadedContract);
+
+      // Configure minimal analytics and tracked IDs
+      AnalyticsService().configure(
+        backendUrl: loadedContract.analytics?.backendUrl,
+      );
+      _trackedIds = loadedContract.analytics?.trackedComponents.toSet() ?? {};
 
       // Execute app start events
       if (loadedContract.eventsActions.onAppStart != null) {
@@ -224,14 +233,14 @@ class _MyAppState extends State<MyApp> {
     if (homeRoute != null) {
       final page = pagesUI.pages[homeRoute.pageId];
       if (page != null) {
-        return EnhancedPageBuilder(config: page);
+        return EnhancedPageBuilder(config: page, trackedIds: _trackedIds);
       }
     }
 
     // Fallback to first page
     if (pagesUI.pages.isNotEmpty) {
       final firstPage = pagesUI.pages.values.first;
-      return EnhancedPageBuilder(config: firstPage);
+      return EnhancedPageBuilder(config: firstPage, trackedIds: _trackedIds);
     }
 
     return const CupertinoPageScaffold(
@@ -293,7 +302,7 @@ class _MyAppState extends State<MyApp> {
       ),
       tabBuilder: (context, index) {
         return CupertinoTabView(
-          builder: (_) => EnhancedPageBuilder(config: tabPages[index]),
+          builder: (_) => EnhancedPageBuilder(config: tabPages[index], trackedIds: _trackedIds),
           onGenerateRoute: _generateRoute,
         );
       },
@@ -302,6 +311,7 @@ class _MyAppState extends State<MyApp> {
 
   Route<dynamic>? _generateRoute(RouteSettings settings) {
     final routeName = settings.name ?? '/';
+
     final routeConfig = contract!.pagesUI.routes[routeName];
 
     if (routeConfig == null) {
@@ -338,7 +348,7 @@ class _MyAppState extends State<MyApp> {
     }
 
     return CupertinoPageRoute(
-      builder: (_) => EnhancedPageBuilder(config: page),
+      builder: (_) => EnhancedPageBuilder(config: page, trackedIds: _trackedIds),
       settings: settings,
     );
   }

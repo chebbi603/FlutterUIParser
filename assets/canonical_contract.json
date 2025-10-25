@@ -421,5 +421,17 @@
     "filtering": {
       "operators": { "eq": "=", "ne": "!=", "gt": ">", "lt": "<" }
     }
+  },
+  "analytics": {
+    "enabled": true,
+    "mockMode": true,
+    "batchSize": 20,
+    "batchIntervalSeconds": 30,
+    "samplingRate": 1.0,
+    "trackedComponents": [],
+    "trackedEventTypes": ["pageEnter", "pageExit"],
+    "maxRetries": 3,
+    "requestTimeoutMs": 5000,
+    "initialBackoffMs": 500
   }
 }

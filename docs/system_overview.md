@@ -9,7 +9,7 @@ This project is a JSON‑driven UI Kit built on Flutter’s Cupertino widgets. I
   - `PageConfig`: page type, layout, navigation bar, children.
   - `NavigationBarConfig`: title.
   - `ComponentConfig`: a single UI element with content, behavior, and style.
-- `lib/widgets/page_builder.dart`: Loads a `PageConfig` and builds the page using `ComponentFactory.createComponent`.
+- `lib/widgets/enhanced_page_builder.dart`: Loads a `PageConfig` and builds the page using `ComponentFactory.createComponent`.
 - `lib/widgets/component_factory.dart`: Maps `ComponentConfig.type` to concrete Flutter widgets and applies styling.
 - `lib/utils/parsing_utils.dart`: Helpers to parse colors, alignments, text align, keyboard types, edge insets, and icons.
 
@@ -180,3 +180,16 @@ or
 - Actions and state updates propagate consistently through binding and `updateState`.
 - Performance: graph engine adds ordered propagation and lazy evaluation.
 - Accessibility: enhanced error styling for inputs using theme `error` color.
+
+## Revision History
+
+- 2025-10-25: Deprecated analytics integration removed; migrated to JSON-driven tracking.
+- 2025-10-25: Analytics docs rewritten; backend flush updated to JSON array.
+- 2025-10-25: Client-side UX pain point tagging added (rage_click, rapid_repeat).
+- 2025-10-25: Codebase lint cleanup for analytics-related files.
+
+## Document Conventions
+- Headings use Title Case across docs.
+- Dates in narrative docs use ISO 8601 (`YYYY-MM-DD`).
+- Analytics payload `timestamp` fields use milliseconds since epoch.
+- Terminology is consistent: `PageConfig`, `ComponentConfig`, `backendUrl`, `componentId`.

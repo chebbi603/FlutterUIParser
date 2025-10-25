@@ -16,6 +16,7 @@ class CanonicalContract {
   final ValidationsConfig validations;
   final PermissionsFlagsConfig permissionsFlags;
   final PaginationConfig pagination;
+  final AnalyticsConfig? analytics;
 
   CanonicalContract({
     required this.meta,
@@ -29,6 +30,7 @@ class CanonicalContract {
     required this.validations,
     required this.permissionsFlags,
     required this.pagination,
+    this.analytics,
   });
 
   factory CanonicalContract.fromJson(Map<String, dynamic> json) {
@@ -52,6 +54,9 @@ class CanonicalContract {
         json['permissionsFlags'] ?? {},
       ),
       pagination: PaginationConfig.fromJson(json['pagination'] ?? {}),
+      analytics: json['analytics'] != null 
+        ? AnalyticsConfig.fromJson(json['analytics'])
+        : null,
     );
   }
 }
@@ -1390,5 +1395,76 @@ class FilteringConfig {
     return FilteringConfig(
       operators: Map<String, String>.from(json['operators'] ?? {}),
     );
+  }
+}
+
+/// Analytics configuration for tracking user behavior
+class AnalyticsConfig {
+  final bool enabled;
+  final bool mockMode;
+  final int batchSize;
+  final int batchIntervalSeconds;
+  final String? backendUrl;
+  final double samplingRate;
+  final List<String> trackedComponents;
+  final List<String> trackedEventTypes;
+  final int maxRetries;
+  final int requestTimeoutMs;
+  final int initialBackoffMs;
+
+  AnalyticsConfig({
+    this.enabled = true,
+    this.mockMode = true,
+    this.batchSize = 50,
+    this.batchIntervalSeconds = 30,
+    this.backendUrl,
+    this.samplingRate = 1.0,
+    this.trackedComponents = const [],
+    this.trackedEventTypes = const [
+      'tap', 'input', 'pageEnter', 'pageExit', 'formSubmit', 'error'
+    ],
+    this.maxRetries = 3,
+    this.requestTimeoutMs = 5000,
+    this.initialBackoffMs = 500,
+  });
+
+  factory AnalyticsConfig.fromJson(Map<String, dynamic> json) {
+    return AnalyticsConfig(
+      enabled: json['enabled'] ?? true,
+      mockMode: json['mockMode'] ?? true,
+      batchSize: json['batchSize'] ?? 50,
+      batchIntervalSeconds: json['batchIntervalSeconds'] ?? 30,
+      backendUrl: json['backendUrl'],
+      samplingRate: (json['samplingRate'] ?? 1.0).toDouble(),
+      trackedComponents: List<String>.from(json['trackedComponents'] ?? []),
+      trackedEventTypes: List<String>.from(
+        json['trackedEventTypes'] ?? [
+          'tap', 'input', 'pageEnter', 'pageExit', 'formSubmit', 'error'
+        ]
+      ),
+      maxRetries: json['maxRetries'] ?? 3,
+      requestTimeoutMs: json['requestTimeoutMs'] ?? 5000,
+      initialBackoffMs: json['initialBackoffMs'] ?? 500,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'enabled': enabled,
+      'mockMode': mockMode,
+      'batchSize': batchSize,
+      'batchIntervalSeconds': batchIntervalSeconds,
+      'backendUrl': backendUrl,
+      'samplingRate': samplingRate,
+      'trackedComponents': trackedComponents,
+      'trackedEventTypes': trackedEventTypes,
+      'maxRetries': maxRetries,
+      'requestTimeoutMs': requestTimeoutMs,
+      'initialBackoffMs': initialBackoffMs,
+    };
+  }
+
+  bool shouldTrackEvent(String eventType) {
+    return trackedEventTypes.contains(eventType);
   }
 }
