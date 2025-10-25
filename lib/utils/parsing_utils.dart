@@ -110,17 +110,17 @@ class ParsingUtils {
     if (colorString.startsWith('#')) {
       try {
         String hexColor = colorString.substring(1);
-        
+
         // Handle 3-digit hex (e.g., #RGB)
         if (hexColor.length == 3) {
           hexColor = hexColor.split('').map((char) => char + char).join();
         }
-        
+
         // Handle 6-digit hex (e.g., #RRGGBB)
         if (hexColor.length == 6) {
           hexColor = 'FF$hexColor'; // Add alpha channel
         }
-        
+
         // Handle 8-digit hex (e.g., #AARRGGBB)
         if (hexColor.length == 8) {
           return Color(int.parse(hexColor, radix: 16));
@@ -134,15 +134,18 @@ class ParsingUtils {
     // Handle RGB/RGBA format
     if (colorString.startsWith('rgb')) {
       try {
-        final RegExp rgbRegex = RegExp(r'rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)');
+        final RegExp rgbRegex = RegExp(
+          r'rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)',
+        );
         final Match? match = rgbRegex.firstMatch(colorString);
-        
+
         if (match != null) {
           final int r = int.parse(match.group(1)!);
           final int g = int.parse(match.group(2)!);
           final int b = int.parse(match.group(3)!);
-          final double a = match.group(4) != null ? double.parse(match.group(4)!) : 1.0;
-          
+          final double a =
+              match.group(4) != null ? double.parse(match.group(4)!) : 1.0;
+
           return Color.fromRGBO(r, g, b, a);
         }
       } catch (e) {
@@ -158,7 +161,7 @@ class ParsingUtils {
   /// Parse button style from string
   static Widget styleButton(Widget button, String? style) {
     if (style == null) return button;
-    
+
     switch (style.toLowerCase()) {
       case 'filled':
         return button; // Default CupertinoButton is filled
@@ -180,7 +183,12 @@ class ParsingUtils {
   }
 
   /// Validate and clamp numeric values
-  static double clampDouble(double? value, double min, double max, double defaultValue) {
+  static double clampDouble(
+    double? value,
+    double min,
+    double max,
+    double defaultValue,
+  ) {
     if (value == null) return defaultValue;
     return value.clamp(min, max);
   }
@@ -193,7 +201,7 @@ class ParsingUtils {
   /// Safely convert dynamic value to double
   static double? safeToDouble(dynamic value) {
     if (value == null) return null;
-    
+
     if (value is double) return value;
     if (value is int) return value.toDouble();
     if (value is String) {
@@ -203,14 +211,14 @@ class ParsingUtils {
         return null;
       }
     }
-    
+
     return null;
   }
 
   /// Safely convert dynamic value to int
   static int? safeToInt(dynamic value) {
     if (value == null) return null;
-    
+
     if (value is int) return value;
     if (value is double) return value.toInt();
     if (value is String) {
@@ -220,7 +228,7 @@ class ParsingUtils {
         return null;
       }
     }
-    
+
     return null;
   }
 

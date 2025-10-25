@@ -8,13 +8,22 @@ class NetworkOrAssetImage extends StatelessWidget {
   final BoxFit fit;
   final double? width;
   final double? height;
-  const NetworkOrAssetImage({super.key, required this.src, this.fit = BoxFit.cover, this.width, this.height});
+  const NetworkOrAssetImage({
+    super.key,
+    required this.src,
+    this.fit = BoxFit.cover,
+    this.width,
+    this.height,
+  });
 
   bool get isNetwork => src.startsWith('http');
 
   @override
   Widget build(BuildContext context) {
-    final image = isNetwork ? Image.network(src, fit: fit, width: width, height: height) : Image.asset(src, fit: fit, width: width, height: height);
+    final image =
+        isNetwork
+            ? Image.network(src, fit: fit, width: width, height: height)
+            : Image.asset(src, fit: fit, width: width, height: height);
     return image;
   }
 }
@@ -71,9 +80,10 @@ class _SimpleVideoPlayerState extends State<SimpleVideoPlayer> {
   @override
   void initState() {
     super.initState();
-    controller = widget.src.startsWith('http')
-        ? VideoPlayerController.networkUrl(Uri.parse(widget.src))
-        : VideoPlayerController.asset(widget.src);
+    controller =
+        widget.src.startsWith('http')
+            ? VideoPlayerController.networkUrl(Uri.parse(widget.src))
+            : VideoPlayerController.asset(widget.src);
     controller.initialize().then((_) {
       setState(() => initialized = true);
     });
@@ -87,7 +97,12 @@ class _SimpleVideoPlayerState extends State<SimpleVideoPlayer> {
 
   @override
   Widget build(BuildContext context) {
-    if (!initialized) return const SizedBox(height: 200, child: Center(child: CupertinoActivityIndicator()));
+    if (!initialized) {
+      return const SizedBox(
+        height: 200,
+        child: Center(child: CupertinoActivityIndicator()),
+      );
+    }
     return AspectRatio(
       aspectRatio: controller.value.aspectRatio,
       child: Stack(
@@ -96,10 +111,16 @@ class _SimpleVideoPlayerState extends State<SimpleVideoPlayer> {
           VideoPlayer(controller),
           CupertinoButton(
             padding: const EdgeInsets.all(8),
-            child: Icon(controller.value.isPlaying ? CupertinoIcons.pause_fill : CupertinoIcons.play_fill),
+            child: Icon(
+              controller.value.isPlaying
+                  ? CupertinoIcons.pause_fill
+                  : CupertinoIcons.play_fill,
+            ),
             onPressed: () {
               setState(() {
-                controller.value.isPlaying ? controller.pause() : controller.play();
+                controller.value.isPlaying
+                    ? controller.pause()
+                    : controller.play();
               });
             },
           ),
@@ -123,9 +144,10 @@ class _SimpleWebViewState extends State<SimpleWebView> {
   @override
   void initState() {
     super.initState();
-    controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..loadRequest(Uri.parse(widget.url));
+    controller =
+        WebViewController()
+          ..setJavaScriptMode(JavaScriptMode.unrestricted)
+          ..loadRequest(Uri.parse(widget.url));
   }
 
   @override

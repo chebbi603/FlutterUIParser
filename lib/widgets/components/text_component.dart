@@ -7,7 +7,6 @@ import 'common.dart';
 class TextComponent {
   static final EnhancedStateManager _stateManager = EnhancedStateManager();
 
-
   static Widget build(EnhancedComponentConfig config) {
     String displayText = config.text ?? 'Text';
 
@@ -44,7 +43,8 @@ class TextComponent {
       overflow: ComponentStyleUtils.parseTextOverflow(config.overflow),
     );
 
-    final componentId = config.id ?? 'text_${stateKeyPath ?? ''}_${config.text ?? ''}';
+    final componentId =
+        config.id ?? 'text_${stateKeyPath ?? ''}_${config.text ?? ''}';
     return GraphSubscriber(
       componentId: componentId,
       dependencies: stateKeyPath != null ? [stateKeyPath] : const <String>[],

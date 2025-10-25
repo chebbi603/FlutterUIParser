@@ -51,7 +51,9 @@ class SharedPrefsPersistence implements StatePersistence {
   Future<Map<String, dynamic>> readAll({String? prefix}) async {
     final prefs = _prefs ?? await SharedPreferences.getInstance();
     final Map<String, dynamic> result = {};
-    final keys = prefs.getKeys().where((k) => prefix == null || k.startsWith(prefix));
+    final keys = prefs.getKeys().where(
+      (k) => prefix == null || k.startsWith(prefix),
+    );
     for (final key in keys) {
       result[key] = prefs.get(key);
     }

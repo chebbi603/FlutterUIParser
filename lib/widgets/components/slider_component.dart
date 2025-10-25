@@ -10,7 +10,11 @@ class SliderComponent {
 
   static Widget build(EnhancedComponentConfig config) {
     final stateKey = ComponentBindingUtils.resolveStateKey(config);
-    final componentId = ComponentBindingUtils.componentIdFor(config, 'slider', stateKey);
+    final componentId = ComponentBindingUtils.componentIdFor(
+      config,
+      'slider',
+      stateKey,
+    );
 
     return GraphSubscriber(
       componentId: componentId,
@@ -29,23 +33,23 @@ class SliderComponent {
         value = value.clamp(0.0, 1.0);
 
         final enabled = config.enabled ?? true;
-        final onChanged = (enabled && (config.onChanged != null || stateKey != null))
-            ? (double newValue) {
-                if (config.onChanged != null) {
-                  EnhancedActionDispatcher.execute(context, config.onChanged!, {
-                    'value': newValue,
-                  });
+        final onChanged =
+            (enabled && (config.onChanged != null || stateKey != null))
+                ? (double newValue) {
+                  if (config.onChanged != null) {
+                    EnhancedActionDispatcher.execute(
+                      context,
+                      config.onChanged!,
+                      {'value': newValue},
+                    );
+                  }
+                  if (stateKey != null) {
+                    _stateManager.setState(stateKey, newValue);
+                  }
                 }
-                if (stateKey != null) {
-                  _stateManager.setState(stateKey, newValue);
-                }
-              }
-            : null;
+                : null;
 
-        return CupertinoSlider(
-          value: value,
-          onChanged: onChanged,
-        );
+        return CupertinoSlider(value: value, onChanged: onChanged);
       },
     );
   }

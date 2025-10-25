@@ -24,7 +24,7 @@ class _MyAppState extends State<MyApp> {
   bool isLoading = true;
   String? errorMessage;
   List<String>? errorDetails;
-  
+
   final EnhancedStateManager stateManager = EnhancedStateManager();
   final ContractApiService apiService = ContractApiService();
   final PermissionManager permissionManager = PermissionManager();
@@ -242,7 +242,9 @@ class _MyAppState extends State<MyApp> {
   Widget _buildTabbedHome() {
     final bottomNav = contract!.pagesUI.bottomNavigation!;
     final pages = contract!.pagesUI.pages;
-    _tabController ??= CupertinoTabController(initialIndex: bottomNav.initialIndex);
+    _tabController ??= CupertinoTabController(
+      initialIndex: bottomNav.initialIndex,
+    );
 
     // Resolve tab pages
     final tabPages =

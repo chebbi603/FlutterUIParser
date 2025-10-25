@@ -12,19 +12,28 @@ class TextFieldComponent {
 
   static Widget build(EnhancedComponentConfig config) {
     final stateKey = ComponentBindingUtils.resolveStateKey(config);
-    final componentId = ComponentBindingUtils.componentIdFor(config, 'textField', stateKey);
+    final componentId = ComponentBindingUtils.componentIdFor(
+      config,
+      'textField',
+      stateKey,
+    );
 
     return GraphSubscriber(
       componentId: componentId,
       dependencies: stateKey != null ? [stateKey] : const <String>[],
       builder: (context) {
-        final currentValue = stateKey != null ? (_stateManager.getState(stateKey) ?? '') : '';
+        final currentValue =
+            stateKey != null ? (_stateManager.getState(stateKey) ?? '') : '';
 
         String? errorText;
         if (config.validation != null) {
           final validator = EnhancedValidator();
           final fieldId = config.name ?? stateKey ?? config.id ?? 'textField';
-          final result = validator.validateField(fieldId, currentValue, config.validation!);
+          final result = validator.validateField(
+            fieldId,
+            currentValue,
+            config.validation!,
+          );
           if (!result.isValid) {
             errorText = result.message ?? 'Invalid input';
           }
@@ -85,8 +94,13 @@ class _ManagedTextFieldState extends State<_ManagedTextField> {
     // Initial validation
     if (widget.config.validation != null) {
       final validator = EnhancedValidator();
-      final fieldId = widget.config.name ?? widget.stateKey ?? widget.componentId;
-      final result = validator.validateField(fieldId, widget.value, widget.config.validation!);
+      final fieldId =
+          widget.config.name ?? widget.stateKey ?? widget.componentId;
+      final result = validator.validateField(
+        fieldId,
+        widget.value,
+        widget.config.validation!,
+      );
       _localErrorText = result.isValid ? null : result.message;
     }
   }
@@ -103,8 +117,13 @@ class _ManagedTextFieldState extends State<_ManagedTextField> {
     // Re-validate on external value updates
     if (widget.config.validation != null) {
       final validator = EnhancedValidator();
-      final fieldId = widget.config.name ?? widget.stateKey ?? widget.componentId;
-      final result = validator.validateField(fieldId, widget.value, widget.config.validation!);
+      final fieldId =
+          widget.config.name ?? widget.stateKey ?? widget.componentId;
+      final result = validator.validateField(
+        fieldId,
+        widget.value,
+        widget.config.validation!,
+      );
       setState(() {
         _localErrorText = result.isValid ? null : result.message;
       });
@@ -139,12 +158,18 @@ class _ManagedTextFieldState extends State<_ManagedTextField> {
             EnhancedStateManager().setState(widget.stateKey!, value);
           }
           if (c.onChanged != null) {
-            EnhancedActionDispatcher.execute(context, c.onChanged!, {'value': value});
+            EnhancedActionDispatcher.execute(context, c.onChanged!, {
+              'value': value,
+            });
           }
           if (c.validation != null) {
             final validator = EnhancedValidator();
             final fieldId = c.name ?? widget.stateKey ?? widget.componentId;
-            final result = validator.validateField(fieldId, value, c.validation!);
+            final result = validator.validateField(
+              fieldId,
+              value,
+              c.validation!,
+            );
             setState(() {
               _localErrorText = result.isValid ? null : result.message;
             });
@@ -152,10 +177,15 @@ class _ManagedTextFieldState extends State<_ManagedTextField> {
         },
         decoration: BoxDecoration(
           border: Border.all(
-            color: (() {
-              final hasError = (effectiveErrorText != null && effectiveErrorText.isNotEmpty);
-              return hasError ? CupertinoColors.destructiveRed : CupertinoColors.separator;
-            })(),
+            color:
+                (() {
+                  final hasError =
+                      (effectiveErrorText != null &&
+                          effectiveErrorText.isNotEmpty);
+                  return hasError
+                      ? CupertinoColors.destructiveRed
+                      : CupertinoColors.separator;
+                })(),
             width: 1.0,
           ),
           borderRadius: BorderRadius.circular(8.0),
@@ -171,7 +201,10 @@ class _ManagedTextFieldState extends State<_ManagedTextField> {
             padding: const EdgeInsets.only(bottom: 4.0),
             child: Text(
               c.label!,
-              style: const TextStyle(fontSize: 13.0, color: CupertinoColors.systemGrey),
+              style: const TextStyle(
+                fontSize: 13.0,
+                color: CupertinoColors.systemGrey,
+              ),
             ),
           ),
         textField,
@@ -180,7 +213,10 @@ class _ManagedTextFieldState extends State<_ManagedTextField> {
             padding: const EdgeInsets.only(top: 4.0),
             child: Text(
               effectiveErrorText,
-              style: const TextStyle(fontSize: 12.0, color: CupertinoColors.destructiveRed),
+              style: const TextStyle(
+                fontSize: 12.0,
+                color: CupertinoColors.destructiveRed,
+              ),
             ),
           ),
       ],

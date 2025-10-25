@@ -242,7 +242,9 @@ class EnhancedComponentFactory {
 
   static Widget _createChip(EnhancedComponentConfig config) {
     // Memoize pure chip (no binding or actions)
-    if (config.binding == null && config.onTap == null && config.onChanged == null) {
+    if (config.binding == null &&
+        config.onTap == null &&
+        config.onChanged == null) {
       final hash = _hashChipConfig(config);
       final cached = _componentCache[hash];
       if (cached != null) return cached;
@@ -361,7 +363,6 @@ class EnhancedComponentFactory {
     }
   }
 
-
   static MainAxisAlignment _parseMainAxisAlignment(String? alignment) {
     switch (alignment) {
       case 'center':
@@ -394,7 +395,6 @@ class EnhancedComponentFactory {
     }
   }
 
-
   static int _hashChipConfig(EnhancedComponentConfig config) {
     return Object.hash(
       'chip',
@@ -405,12 +405,12 @@ class EnhancedComponentFactory {
     );
   }
 
-
   // Builder methods restored inside EnhancedComponentFactory
   static Widget _createImage(EnhancedComponentConfig config) {
-    final src = config.binding != null && config.boundData != null
-        ? config.boundData![config.binding!]?.toString() ?? ''
-        : (config.src ?? config.text ?? '');
+    final src =
+        config.binding != null && config.boundData != null
+            ? config.boundData![config.binding!]?.toString() ?? ''
+            : (config.src ?? config.text ?? '');
     if (config.src == null && config.text != null) {
       // Deprecation warning for image.text
       debugPrint('[image] "text" is deprecated; use "src" instead.');
@@ -424,25 +424,33 @@ class EnhancedComponentFactory {
   }
 
   static Widget _createCard(EnhancedComponentConfig config) {
-    final children = config.children
-            ?.map((child) => createComponent(child.copyWith(boundData: config.boundData)))
+    final children =
+        config.children
+            ?.map(
+              (child) =>
+                  createComponent(child.copyWith(boundData: config.boundData)),
+            )
             .toList() ??
         [];
 
     return Container(
-      padding: config.style?.padding?.toEdgeInsets() ?? const EdgeInsets.all(16),
+      padding:
+          config.style?.padding?.toEdgeInsets() ?? const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _parseColor(config.style?.backgroundColor) ?? _parseColor(_currentTheme?['surface']),
+        color:
+            _parseColor(config.style?.backgroundColor) ??
+            _parseColor(_currentTheme?['surface']),
         borderRadius: BorderRadius.circular(config.style?.borderRadius ?? 8.0),
-        boxShadow: config.style?.elevation != null && config.style!.elevation! > 0
-            ? [
-                BoxShadow(
-                  color: CupertinoColors.black.withValues(alpha: 0.1),
-                  blurRadius: config.style!.elevation!,
-                  offset: const Offset(0, 2),
-                ),
-              ]
-            : null,
+        boxShadow:
+            config.style?.elevation != null && config.style!.elevation! > 0
+                ? [
+                  BoxShadow(
+                    color: CupertinoColors.black.withValues(alpha: 0.1),
+                    blurRadius: config.style!.elevation!,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+                : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -456,7 +464,8 @@ class EnhancedComponentFactory {
   }
 
   static Widget _createGrid(EnhancedComponentConfig config) {
-    final children = config.children?.map((child) => createComponent(child)).toList() ?? [];
+    final children =
+        config.children?.map((child) => createComponent(child)).toList() ?? [];
     final columns = config.columns ?? 2;
     final spacing = config.spacing ?? 8.0;
 
@@ -471,7 +480,8 @@ class EnhancedComponentFactory {
   }
 
   static Widget _createRow(EnhancedComponentConfig config) {
-    final children = config.children?.map((child) => createComponent(child)).toList() ?? [];
+    final children =
+        config.children?.map((child) => createComponent(child)).toList() ?? [];
 
     return Row(
       mainAxisAlignment: _parseMainAxisAlignment(config.mainAxisAlignment),
@@ -481,7 +491,8 @@ class EnhancedComponentFactory {
   }
 
   static Widget _createColumn(EnhancedComponentConfig config) {
-    final children = config.children?.map((child) => createComponent(child)).toList() ?? [];
+    final children =
+        config.children?.map((child) => createComponent(child)).toList() ?? [];
 
     return Column(
       mainAxisAlignment: _parseMainAxisAlignment(config.mainAxisAlignment),
@@ -491,18 +502,21 @@ class EnhancedComponentFactory {
   }
 
   static Widget _createCenter(EnhancedComponentConfig config) {
-    final child = config.children?.isNotEmpty == true
-        ? createComponent(config.children!.first)
-        : const SizedBox.shrink();
+    final child =
+        config.children?.isNotEmpty == true
+            ? createComponent(config.children!.first)
+            : const SizedBox.shrink();
 
     return Center(child: child);
   }
 
   static Widget _createHero(EnhancedComponentConfig config) {
-    final children = config.children?.map((child) => createComponent(child)).toList() ?? [];
+    final children =
+        config.children?.map((child) => createComponent(child)).toList() ?? [];
 
     return Container(
-      padding: config.style?.padding?.toEdgeInsets() ?? const EdgeInsets.all(24),
+      padding:
+          config.style?.padding?.toEdgeInsets() ?? const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: _parseColor(config.style?.backgroundColor),
         borderRadius: BorderRadius.circular(config.style?.borderRadius ?? 0),
@@ -521,26 +535,29 @@ class EnhancedComponentFactory {
   static Widget _createSearchBar(EnhancedComponentConfig config) {
     return Builder(
       builder: (context) {
-        final String debounceKey = config.id ?? 'searchBar_${config.placeholder ?? ''}';
+        final String debounceKey =
+            config.id ?? 'searchBar_${config.placeholder ?? ''}';
         return CupertinoSearchTextField(
           placeholder: config.placeholder ?? 'Search...',
           onChanged: (value) {
             if (config.onChanged != null) {
               final debounceMs = config.onChanged!.debounceMs ?? 0;
               if (debounceMs > 0) {
-                _debounceAction(debounceKey, Duration(milliseconds: debounceMs), () {
-                  EnhancedActionDispatcher.execute(
-                    context,
-                    config.onChanged!,
-                    {'value': value},
-                  );
-                });
-              } else {
-                EnhancedActionDispatcher.execute(
-                  context,
-                  config.onChanged!,
-                  {'value': value},
+                _debounceAction(
+                  debounceKey,
+                  Duration(milliseconds: debounceMs),
+                  () {
+                    EnhancedActionDispatcher.execute(
+                      context,
+                      config.onChanged!,
+                      {'value': value},
+                    );
+                  },
                 );
+              } else {
+                EnhancedActionDispatcher.execute(context, config.onChanged!, {
+                  'value': value,
+                });
               }
             }
           },
@@ -551,7 +568,11 @@ class EnhancedComponentFactory {
 
   static final Map<String, Timer?> _debouncers = {};
 
-  static void _debounceAction(String key, Duration duration, void Function() action) {
+  static void _debounceAction(
+    String key,
+    Duration duration,
+    void Function() action,
+  ) {
     final existing = _debouncers[key];
     if (existing != null) {
       existing.cancel();
@@ -594,7 +615,9 @@ class _EnhancedListWidgetState extends State<EnhancedListWidget> {
     // Defer loading until visible to approximate lazy evaluation
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        final id = widget.componentId ?? 'list_${widget.config.dataSource?.service}_${widget.config.dataSource?.endpoint}';
+        final id =
+            widget.componentId ??
+            'list_${widget.config.dataSource?.service}_${widget.config.dataSource?.endpoint}';
         GraphEngine().setComponentVisible(id, true);
         _loadPage(reset: true);
       }
@@ -603,7 +626,9 @@ class _EnhancedListWidgetState extends State<EnhancedListWidget> {
 
   Future<void> _loadPage({bool reset = false}) async {
     if (widget.config.dataSource == null) return;
-    final id = widget.componentId ?? 'list_${widget.config.dataSource?.service}_${widget.config.dataSource?.endpoint}';
+    final id =
+        widget.componentId ??
+        'list_${widget.config.dataSource?.service}_${widget.config.dataSource?.endpoint}';
 
     setState(() {
       if (reset) {
@@ -619,9 +644,7 @@ class _EnhancedListWidgetState extends State<EnhancedListWidget> {
 
     try {
       final dataSource = widget.config.dataSource!;
-      final Map<String, dynamic> params = {
-        ...?dataSource.params,
-      };
+      final Map<String, dynamic> params = {...?dataSource.params};
       if (dataSource.pagination?.enabled == true) {
         params['page'] = _currentPage;
       }
@@ -717,7 +740,10 @@ class _EnhancedListWidgetState extends State<EnhancedListWidget> {
                 padding: const EdgeInsets.symmetric(vertical: 12.0),
                 child: Center(
                   child: CupertinoButton(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                     onPressed: () => _loadPage(reset: false),
                     child: const Text('Load more'),
                   ),

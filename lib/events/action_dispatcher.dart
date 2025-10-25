@@ -150,7 +150,8 @@ class EnhancedActionDispatcher {
     Map<String, dynamic>? additionalData,
   ) async {
     String? service = config.service ?? config.params?['service']?.toString();
-    String? endpoint = config.endpoint ?? config.params?['endpoint']?.toString();
+    String? endpoint =
+        config.endpoint ?? config.params?['endpoint']?.toString();
 
     // Resolve template variables in service/endpoint if provided as templates
     service = _resolveTemplateString(service);
@@ -215,13 +216,17 @@ class EnhancedActionDispatcher {
       } else if (value is Map) {
         resolved[key] = _resolveTemplates(Map<String, dynamic>.from(value));
       } else if (value is List) {
-        resolved[key] = value
-            .map((v) => v is String
-                ? _resolveTemplateString(v)
-                : (v is Map
-                    ? _resolveTemplates(Map<String, dynamic>.from(v))
-                    : v))
-            .toList();
+        resolved[key] =
+            value
+                .map(
+                  (v) =>
+                      v is String
+                          ? _resolveTemplateString(v)
+                          : (v is Map
+                              ? _resolveTemplates(Map<String, dynamic>.from(v))
+                              : v),
+                )
+                .toList();
       } else {
         resolved[key] = value;
       }
@@ -363,10 +368,9 @@ class EnhancedActionDispatcher {
       context: context,
       builder:
           (context) => CupertinoAlertDialog(
-            title:
-                Text(
-                  config.params?['title']?.toString() ?? 'Form Submitted',
-                ),
+            title: Text(
+              config.params?['title']?.toString() ?? 'Form Submitted',
+            ),
             content: Text(buffer.toString()),
             actions: [
               CupertinoDialogAction(
@@ -464,16 +468,17 @@ class EnhancedActionDispatcher {
   ) async {
     showCupertinoDialog(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: const Text('Error'),
-        content: Text(error),
-        actions: [
-          CupertinoDialogAction(
-            child: const Text('OK'),
-            onPressed: () => Navigator.of(context).pop(),
+      builder:
+          (context) => CupertinoAlertDialog(
+            title: const Text('Error'),
+            content: Text(error),
+            actions: [
+              CupertinoDialogAction(
+                child: const Text('OK'),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 }

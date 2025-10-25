@@ -1,12 +1,18 @@
 class ComponentMetadata {
   final List<String> requiredProps;
   final Map<String, dynamic> defaults;
-  const ComponentMetadata({this.requiredProps = const [], this.defaults = const {}});
+  const ComponentMetadata({
+    this.requiredProps = const [],
+    this.defaults = const {},
+  });
 }
 
 class ComponentRegistry {
   static final Map<String, ComponentMetadata> _registry = {
-    'text': ComponentMetadata(requiredProps: [], defaults: {'style.fontSize': 16}),
+    'text': ComponentMetadata(
+      requiredProps: [],
+      defaults: {'style.fontSize': 16},
+    ),
     'button': ComponentMetadata(requiredProps: ['text']),
     'textButton': ComponentMetadata(requiredProps: ['text']),
     'icon': ComponentMetadata(requiredProps: ['icon']),

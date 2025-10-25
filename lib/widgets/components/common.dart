@@ -18,7 +18,10 @@ class ComponentStyleUtils {
     return Container(
       width: style.width,
       height: style.height,
-      constraints: style.maxWidth != null ? BoxConstraints(maxWidth: style.maxWidth!) : null,
+      constraints:
+          style.maxWidth != null
+              ? BoxConstraints(maxWidth: style.maxWidth!)
+              : null,
       margin: style.margin?.toEdgeInsets(),
       child: child,
     );
@@ -85,7 +88,11 @@ class ComponentBindingUtils {
     return null;
   }
 
-  static String componentIdFor(EnhancedComponentConfig config, String prefix, [String? stateKey]) {
+  static String componentIdFor(
+    EnhancedComponentConfig config,
+    String prefix, [
+    String? stateKey,
+  ]) {
     return config.id ?? '${prefix}_${stateKey ?? 'unknown'}';
   }
 }

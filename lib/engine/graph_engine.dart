@@ -49,7 +49,9 @@ class GraphEngine extends ChangeNotifier {
     if (added && _hasCycle()) {
       // revert and throw
       _edges[fromId]!.remove(toId);
-      throw StateError('Graph cycle detected when adding edge $fromId -> $toId');
+      throw StateError(
+        'Graph cycle detected when adding edge $fromId -> $toId',
+      );
     }
     return added;
   }
@@ -97,7 +99,9 @@ class GraphEngine extends ChangeNotifier {
     }
 
     // Compute ordered targets using topological sort restricted to reachable nodes
-    final orderedTargets = _topologicalOrderFrom(sourceId).where(_visibleComponents.contains);
+    final orderedTargets = _topologicalOrderFrom(
+      sourceId,
+    ).where(_visibleComponents.contains);
     for (final componentId in orderedTargets) {
       final tick = _componentTicks[componentId];
       if (tick != null) {

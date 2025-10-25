@@ -81,7 +81,8 @@ class EnhancedApiService {
     final requestHeaders = _buildHeaders(endpointConfig, headers);
 
     // Check cache
-    final cached = endpointConfig.caching?.enabled == true ? _getFromCache(url) : null;
+    final cached =
+        endpointConfig.caching?.enabled == true ? _getFromCache(url) : null;
     if (cached != null) {
       return ApiResponse<T>(
         data: cached.data as T,
@@ -167,7 +168,10 @@ class EnhancedApiService {
         fromCache: false,
       );
     } else {
-      final message = _getErrorMessage(response.statusCode, endpointConfig.errorCodes);
+      final message = _getErrorMessage(
+        response.statusCode,
+        endpointConfig.errorCodes,
+      );
       throw ApiException(message, statusCode: response.statusCode);
     }
   }
@@ -212,7 +216,10 @@ class EnhancedApiService {
       }
     }
 
-    final query = finalParams.isEmpty ? '' : '?${finalParams.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&')}';
+    final query =
+        finalParams.isEmpty
+            ? ''
+            : '?${finalParams.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&')}';
     return '$resolvedBaseUrl$path$query';
   }
 
@@ -322,11 +329,17 @@ class EnhancedApiService {
         }
         break;
       default:
-        if (config.minLength != null && value.toString().length < config.minLength!) {
-          throw ApiException('Parameter "$name" must be at least ${config.minLength} characters');
+        if (config.minLength != null &&
+            value.toString().length < config.minLength!) {
+          throw ApiException(
+            'Parameter "$name" must be at least ${config.minLength} characters',
+          );
         }
-        if (config.enumValues != null && !config.enumValues!.contains(value.toString())) {
-          throw ApiException('Parameter "$name" must be one of ${config.enumValues}');
+        if (config.enumValues != null &&
+            !config.enumValues!.contains(value.toString())) {
+          throw ApiException(
+            'Parameter "$name" must be one of ${config.enumValues}',
+          );
         }
         break;
     }
@@ -360,7 +373,11 @@ class EnhancedApiService {
     }
   }
 
-  void _validateValueAgainstSchema(String key, dynamic value, Map<String, dynamic> schema) {
+  void _validateValueAgainstSchema(
+    String key,
+    dynamic value,
+    Map<String, dynamic> schema,
+  ) {
     final type = schema['type'];
     if (type == 'array') {
       if (value is! List) {
@@ -392,13 +409,19 @@ class EnhancedApiService {
   void _validatePrimitiveType(String key, dynamic value, String type) {
     switch (type) {
       case 'string':
-        if (value is! String) throw ApiException('Field "$key" must be string');
+        if (value is! String) {
+          throw ApiException('Field "$key" must be string');
+        }
         break;
       case 'number':
-        if (value is! num) throw ApiException('Field "$key" must be number');
+        if (value is! num) {
+          throw ApiException('Field "$key" must be number');
+        }
         break;
       case 'boolean':
-        if (value is! bool) throw ApiException('Field "$key" must be boolean');
+        if (value is! bool) {
+          throw ApiException('Field "$key" must be boolean');
+        }
         break;
       case 'object':
         if (value is! Map) throw ApiException('Field "$key" must be object');
@@ -411,7 +434,11 @@ class EnhancedApiService {
     }
   }
 
-  void _validateArrayItemsAgainstModel(String key, List<dynamic> array, String modelName) {
+  void _validateArrayItemsAgainstModel(
+    String key,
+    List<dynamic> array,
+    String modelName,
+  ) {
     final model = _contract?.dataModels[modelName];
     if (model == null) return;
     for (final item in array) {
@@ -439,21 +466,31 @@ class EnhancedApiService {
       if (v == null) continue;
       switch (cfg.type) {
         case 'string':
-          if (v is! String) throw ApiException('Field "$key.$fieldName" must be string');
+          if (v is! String) {
+            throw ApiException('Field "$key.$fieldName" must be string');
+          }
           if (cfg.minLength != null && v.length < cfg.minLength!) {
-            throw ApiException('Field "$key.$fieldName" minLength ${cfg.minLength}');
+            throw ApiException(
+              'Field "$key.$fieldName" minLength ${cfg.minLength}',
+            );
           }
           if (cfg.maxLength != null && v.length > cfg.maxLength!) {
-            throw ApiException('Field "$key.$fieldName" maxLength ${cfg.maxLength}');
+            throw ApiException(
+              'Field "$key.$fieldName" maxLength ${cfg.maxLength}',
+            );
           }
           break;
         case 'number':
         case 'int':
         case 'double':
-          if (v is! num) throw ApiException('Field "$key.$fieldName" must be number');
+          if (v is! num) {
+            throw ApiException('Field "$key.$fieldName" must be number');
+          }
           break;
         case 'boolean':
-          if (v is! bool) throw ApiException('Field "$key.$fieldName" must be boolean');
+          if (v is! bool) {
+            throw ApiException('Field "$key.$fieldName" must be boolean');
+          }
           break;
         default:
           break;

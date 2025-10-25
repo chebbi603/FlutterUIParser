@@ -43,7 +43,10 @@ class EnhancedStateManager extends ChangeNotifier {
       final fieldConfig = entry.value;
 
       if (!_globalState.containsKey(key) && fieldConfig.defaultValue != null) {
-        _globalState[key] = _castValue(fieldConfig.type, fieldConfig.defaultValue);
+        _globalState[key] = _castValue(
+          fieldConfig.type,
+          fieldConfig.defaultValue,
+        );
       }
     }
 
@@ -60,7 +63,10 @@ class EnhancedStateManager extends ChangeNotifier {
 
         if (!_pageState[pageId]!.containsKey(key) &&
             fieldConfig.defaultValue != null) {
-          _pageState[pageId]![key] = _castValue(fieldConfig.type, fieldConfig.defaultValue);
+          _pageState[pageId]![key] = _castValue(
+            fieldConfig.type,
+            fieldConfig.defaultValue,
+          );
         }
       }
     }
@@ -77,7 +83,10 @@ class EnhancedStateManager extends ChangeNotifier {
       final key = entry.key;
       final field = entry.value;
       final persistedKey = _globalStorageKey(key);
-      final persistedValue = await _readByPolicy(field.persistence, persistedKey);
+      final persistedValue = await _readByPolicy(
+        field.persistence,
+        persistedKey,
+      );
       if (persistedValue != null) {
         _globalState[key] = _castValue(field.type, persistedValue);
       }
@@ -90,7 +99,10 @@ class EnhancedStateManager extends ChangeNotifier {
         final key = fieldEntry.key;
         final field = fieldEntry.value;
         final persistedKey = _pageStorageKey(pageId, key);
-        final persistedValue = await _readByPolicy(field.persistence, persistedKey);
+        final persistedValue = await _readByPolicy(
+          field.persistence,
+          persistedKey,
+        );
         if (persistedValue != null) {
           _pageState[pageId]![key] = _castValue(field.type, persistedValue);
         }
@@ -114,7 +126,11 @@ class EnhancedStateManager extends ChangeNotifier {
     }
   }
 
-  Future<void> _writeByPolicy(String? persistence, String storageKey, dynamic value) async {
+  Future<void> _writeByPolicy(
+    String? persistence,
+    String storageKey,
+    dynamic value,
+  ) async {
     switch (persistence) {
       case 'secure':
         await _securePersistence.write(storageKey, value);
@@ -132,7 +148,8 @@ class EnhancedStateManager extends ChangeNotifier {
   }
 
   String _globalStorageKey(String key) => 'state:global:$key';
-  String _pageStorageKey(String pageId, String key) => 'state:page:$pageId:$key';
+  String _pageStorageKey(String pageId, String key) =>
+      'state:page:$pageId:$key';
 
   dynamic _castValue(String type, dynamic value) {
     switch (type) {
@@ -164,7 +181,11 @@ class EnhancedStateManager extends ChangeNotifier {
     _globalState[key] = value;
     final fieldConfig = _config?.global[key];
     if (fieldConfig != null) {
-      await _writeByPolicy(fieldConfig.persistence, _globalStorageKey(key), value);
+      await _writeByPolicy(
+        fieldConfig.persistence,
+        _globalStorageKey(key),
+        value,
+      );
     }
     GraphEngine().notifyStateChange(key);
     notifyListeners();
@@ -180,14 +201,19 @@ class EnhancedStateManager extends ChangeNotifier {
     _pageState[pageId] ??= {};
     // Push previous value to history with namespaced path
     final path = '$pageId.$key';
-    final prev = _pageState[pageId]!.containsKey(key) ? _pageState[pageId]![key] : null;
+    final prev =
+        _pageState[pageId]!.containsKey(key) ? _pageState[pageId]![key] : null;
     _history.putIfAbsent(path, () => <dynamic>[]).add(prev);
     _redo[path]?.clear();
 
     _pageState[pageId]![key] = value;
     final fieldConfig = _config?.pages[pageId]?[key];
     if (fieldConfig != null) {
-      await _writeByPolicy(fieldConfig.persistence, _pageStorageKey(pageId, key), value);
+      await _writeByPolicy(
+        fieldConfig.persistence,
+        _pageStorageKey(pageId, key),
+        value,
+      );
     }
     GraphEngine().notifyStateChange(path);
     notifyListeners();

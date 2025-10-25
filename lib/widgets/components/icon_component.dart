@@ -14,17 +14,20 @@ class IconComponent {
 
   static Widget buildIconButton(EnhancedComponentConfig config) {
     return Builder(
-      builder: (context) => CupertinoButton(
-        onPressed: ((config.enabled ?? true) && config.onTap != null)
-            ? () => EnhancedActionDispatcher.execute(context, config.onTap!)
-            : null,
-        padding: EdgeInsets.zero,
-        child: Icon(
-          ParsingUtils.parseIcon(config.icon ?? config.name ?? 'circle'),
-          size: ParsingUtils.safeToDouble(config.size) ?? 24.0,
-          color: ParsingUtils.parseColor(config.style?.color),
-        ),
-      ),
+      builder:
+          (context) => CupertinoButton(
+            onPressed:
+                ((config.enabled ?? true) && config.onTap != null)
+                    ? () =>
+                        EnhancedActionDispatcher.execute(context, config.onTap!)
+                    : null,
+            padding: EdgeInsets.zero,
+            child: Icon(
+              ParsingUtils.parseIcon(config.icon ?? config.name ?? 'circle'),
+              size: ParsingUtils.safeToDouble(config.size) ?? 24.0,
+              color: ParsingUtils.parseColor(config.style?.color),
+            ),
+          ),
     );
   }
 }

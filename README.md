@@ -97,6 +97,7 @@ Edit `assets/canonical_contract.json` to see real-time changes in the app.
 
 - **[Canonical Framework Guide](docs/canonical_framework_guide.md)**: Comprehensive documentation
 - **[System Overview](docs/system_overview.md)**: Original system documentation
+- **[Contract Validator Usage](docs/contract_validator_usage.md)**: How to validate contracts and use the CLI
 
 ## 🔧 Configuration Examples
 

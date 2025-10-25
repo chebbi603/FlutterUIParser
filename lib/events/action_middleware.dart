@@ -5,7 +5,11 @@ import '../models/config_models.dart';
 abstract class ActionMiddleware {
   Future<void> before(ActionConfig config, Map<String, dynamic>? ctx) async {}
   Future<void> after(ActionConfig config, Map<String, dynamic>? ctx) async {}
-  Future<void> onError(ActionConfig config, Object error, Map<String, dynamic>? ctx) async {}
+  Future<void> onError(
+    ActionConfig config,
+    Object error,
+    Map<String, dynamic>? ctx,
+  ) async {}
 }
 
 class LoggingMiddleware extends ActionMiddleware {
@@ -13,18 +17,25 @@ class LoggingMiddleware extends ActionMiddleware {
   Future<void> before(ActionConfig config, Map<String, dynamic>? ctx) async {
     debugPrint('[action] start ${config.action} ctx=$ctx');
   }
+
   @override
   Future<void> after(ActionConfig config, Map<String, dynamic>? ctx) async {
     debugPrint('[action] end   ${config.action} ctx=$ctx');
   }
+
   @override
-  Future<void> onError(ActionConfig config, Object error, Map<String, dynamic>? ctx) async {
+  Future<void> onError(
+    ActionConfig config,
+    Object error,
+    Map<String, dynamic>? ctx,
+  ) async {
     debugPrint('[action] error ${config.action}: $error');
   }
 }
 
 class ActionMiddlewarePipeline {
-  static final ActionMiddlewarePipeline _instance = ActionMiddlewarePipeline._internal();
+  static final ActionMiddlewarePipeline _instance =
+      ActionMiddlewarePipeline._internal();
   factory ActionMiddlewarePipeline() => _instance;
   ActionMiddlewarePipeline._internal();
 
@@ -42,7 +53,11 @@ class ActionMiddlewarePipeline {
     }
   }
 
-  Future<void> runOnError(ActionConfig config, Object error, Map<String, dynamic>? ctx) async {
+  Future<void> runOnError(
+    ActionConfig config,
+    Object error,
+    Map<String, dynamic>? ctx,
+  ) async {
     for (final m in _middlewares) {
       await m.onError(config, error, ctx);
     }

@@ -6,7 +6,8 @@ class EventBus {
   factory EventBus() => _instance;
   EventBus._internal();
 
-  final StreamController<dynamic> _controller = StreamController<dynamic>.broadcast();
+  final StreamController<dynamic> _controller =
+      StreamController<dynamic>.broadcast();
 
   Stream<T> on<T>() => _controller.stream.where((e) => e is T).cast<T>();
 

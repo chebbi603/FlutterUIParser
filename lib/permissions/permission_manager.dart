@@ -25,7 +25,7 @@ class PermissionManager {
 
   void _updateUserPermissions() {
     _userPermissions.clear();
-    
+
     if (_config == null || _currentUserRole == null) return;
 
     final roleConfig = _config!.roles[_currentUserRole!];
@@ -40,7 +40,7 @@ class PermissionManager {
         final inheritedConfig = _config!.roles[inheritedRole];
         if (inheritedConfig != null) {
           _userPermissions.addAll(inheritedConfig.permissions);
-          
+
           // Recursively add inherited permissions
           _addInheritedPermissions(inheritedRole);
         }
@@ -68,12 +68,16 @@ class PermissionManager {
 
   /// Check if user has any of the specified permissions
   bool hasAnyPermission(List<String> permissions) {
-    return permissions.any((permission) => _userPermissions.contains(permission));
+    return permissions.any(
+      (permission) => _userPermissions.contains(permission),
+    );
   }
 
   /// Check if user has all of the specified permissions
   bool hasAllPermissions(List<String> permissions) {
-    return permissions.every((permission) => _userPermissions.contains(permission));
+    return permissions.every(
+      (permission) => _userPermissions.contains(permission),
+    );
   }
 
   /// Check if feature flag is enabled for current user
