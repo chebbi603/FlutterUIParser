@@ -36,13 +36,22 @@
           "responseSchema": { "type": "object", "properties": { "data": { "type": "array", "items": { "$ref": "#/dataModels/post" } } }, "required": ["data"] }
         }
       }
+    },
+    "auth": {
+      "baseUrl": "${API_BASE_URL}",
+      "endpoints": {
+        "login": { "path": "/auth/login", "method": "POST" },
+        "refresh": { "path": "/auth/refresh", "method": "POST" },
+        "logout": { "path": "/auth/logout", "method": "POST" }
+      }
     }
   },
   "pagesUI": {
     "routes": {
       "/": { "pageId": "home" },
-      "/profile": { "pageId": "profile" },
-      "/form": { "pageId": "form" }
+      "/profile": { "pageId": "profile", "auth": true },
+      "/form": { "pageId": "form" },
+      "/login": { "pageId": "login" }
     },
     "bottomNavigation": {
       "enabled": true,
@@ -143,6 +152,11 @@
             "type": "textButton",
             "text": "Go to Profile",
             "onTap": { "action": "navigate", "route": "/profile" }
+          },
+          {
+            "type": "textButton",
+            "text": "Go to Login",
+            "onTap": { "action": "navigate", "route": "/login" }
           }
         ]
       },
@@ -305,6 +319,81 @@
           }
         ]
       }
+      ,
+      "login": {
+        "id": "login",
+        "title": "Login",
+        "layout": "scroll",
+        "navigationBar": { "title": "Login" },
+        "children": [
+          {
+            "type": "hero",
+            "style": {
+              "padding": 16,
+              "backgroundColor": "${theme.surface}",
+              "borderRadius": 12
+            },
+            "children": [
+              { "type": "text", "text": "Welcome back", "style": { "fontSize": 20, "fontWeight": "bold" } },
+              { "type": "text", "text": "Sign in to continue", "style": { "color": "${theme.onSurfaceVariant}" } }
+            ]
+          },
+          {
+            "type": "form",
+            "style": {
+              "padding": { "horizontal": 16, "vertical": 8 },
+              "backgroundColor": "${theme.surface}",
+              "borderRadius": 8
+            },
+            "children": [
+              {
+                "type": "textField",
+                "id": "loginEmail",
+                "label": "Email",
+                "placeholder": "you@example.com",
+                "keyboardType": "emailAddress",
+                "validation": { "email": true, "required": true, "message": "Valid email required" },
+                "onChanged": { "action": "updateState", "params": { "key": "login.email" } }
+              },
+              {
+                "type": "textField",
+                "id": "loginPassword",
+                "label": "Password",
+                "placeholder": "••••••",
+                "obscureText": true,
+                "validation": { "required": true, "minLength": 6, "message": "Min 6 characters" },
+                "onChanged": { "action": "updateState", "params": { "key": "login.password" } }
+              },
+              {
+                "type": "button",
+                "text": "Sign In",
+                "style": { "backgroundColor": "${theme.primary}", "foregroundColor": "#FFFFFF", "padding": { "horizontal": 16, "vertical": 12 }, "borderRadius": 8 },
+                "onTap": {
+                  "action": "apiCall",
+                  "service": "auth",
+                  "endpoint": "login",
+                  "params": {
+                    "email": "${state.login.email}",
+                    "password": "${state.login.password}"
+                  },
+                "onSuccess": {
+                  "action": "sequence",
+                  "params": {
+                    "steps": [
+                        { "action": "showSuccess", "params": { "message": "Login successful" } },
+                        { "action": "setAuthToken", "params": { "value": "${response.accessToken}" } },
+                        { "action": "updateState", "params": { "key": "refreshToken", "scope": "global", "value": "${response.refreshToken}" } },
+                        { "action": "navigate", "route": "/" }
+                      ]
+                    }
+                  },
+                  "onError": { "action": "showError", "params": { "message": "Login failed" } }
+                }
+              }
+            ]
+          }
+        ]
+      }
     }
   },
   "state": {
@@ -314,7 +403,9 @@
         "type": "string",
         "default": "This message is bound from state."
       },
-      "authToken": { "type": "string", "persistence": "secure" }
+      "authToken": { "type": "string", "persistence": "secure" },
+      "refreshToken": { "type": "string", "persistence": "secure" },
+      "user": { "type": "object", "persistence": "secure" }
     },
     "pages": {}
   },

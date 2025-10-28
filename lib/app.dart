@@ -2,12 +2,14 @@ import 'dart:convert';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'models/config_models.dart';
 // import 'validation/contract_validator.dart';
 import 'widgets/component_factory.dart';
 import 'widgets/enhanced_page_builder.dart';
 import 'state/state_manager.dart';
 import 'services/api_service.dart';
+import 'services/auth_service.dart';
 import 'permissions/permission_manager.dart';
 import 'navigation/navigation_bridge.dart';
 import 'utils/parsing_utils.dart';
@@ -67,9 +69,29 @@ class _MyAppState extends State<MyApp> {
       permissionManager.initialize(loadedContract.permissionsFlags);
       EnhancedComponentFactory.initialize(loadedContract);
 
-      // Configure minimal analytics and tracked IDs
+      // Attach auth service and restore persisted tokens
+      final authService = AuthService(stateManager, apiService);
+      apiService.attachAuthService(authService);
+      final persistedAccess = stateManager.getGlobalState<String>('authToken');
+      if (persistedAccess != null && persistedAccess.isNotEmpty) {
+        apiService.setAuthToken(persistedAccess);
+      }
+
+      // Configure analytics with env override and simple validation
+      final envBackend = (dotenv.isInitialized ? dotenv.env['ANALYTICS_BACKEND_URL'] : null)?.trim();
+      final mockEnv = dotenv.isInitialized ? dotenv.env['ANALYTICS_MOCK_MODE'] : null;
+      final mockMode = ((mockEnv ?? 'false').toLowerCase() == 'true');
+      final configuredBackend = (envBackend != null && envBackend.isNotEmpty)
+          ? envBackend
+          : loadedContract.analytics?.backendUrl;
+      final batchSize = int.tryParse(((dotenv.isInitialized ? dotenv.env['ANALYTICS_BATCH_SIZE'] : null) ?? '').trim());
+      final flushInterval = int.tryParse(((dotenv.isInitialized ? dotenv.env['ANALYTICS_FLUSH_INTERVAL_MS'] : null) ?? '').trim());
+      final wsUrl = (dotenv.isInitialized ? dotenv.env['WS_URL'] : null)?.trim();
       AnalyticsService().configure(
-        backendUrl: loadedContract.analytics?.backendUrl,
+        backendUrl: configuredBackend,
+        wsUrl: wsUrl,
+        batchSize: batchSize,
+        flushIntervalMs: flushInterval,
       );
       _trackedIds = loadedContract.analytics?.trackedComponents.toSet() ?? {};
 
@@ -81,19 +103,33 @@ class _MyAppState extends State<MyApp> {
         }
       }
 
-      setState(() {
-        contract = loadedContract;
-        isLoading = false;
-        errorMessage = null;
-        errorDetails = null;
-      });
-    } catch (e) {
+      // If analytics backend missing and not in mock mode, show a clear message
+      if ((configuredBackend == null || configuredBackend.isEmpty) && !mockMode) {
+        setState(() {
+          contract = loadedContract;
+          isLoading = false;
+          errorMessage = 'Missing analytics backend URL. Set ANALYTICS_BACKEND_URL in .env or provide analytics.backendUrl in contract.';
+          errorDetails = null;
+        });
+      } else {
+        setState(() {
+          contract = loadedContract;
+          isLoading = false;
+          errorMessage = null;
+          errorDetails = null;
+        });
+      }
+    } catch (e, st) {
+      // Capture stack trace to aid debugging
+      final lines = st.toString().split('\n');
+      final top = lines.take(12).toList();
       setState(() {
         isLoading = false;
         errorMessage = 'Error loading canonical contract: $e';
-        errorDetails = null;
+        errorDetails = top;
       });
       debugPrint('Error loading contract: $e');
+      debugPrint('Stack trace (top): ${top.join("\\n")}');
     }
   }
 
@@ -315,9 +351,18 @@ class _MyAppState extends State<MyApp> {
 
     // Check authentication
     if (routeConfig.auth == true) {
-      final user = stateManager.getGlobalState('user');
-      if (user == null) {
-        // Redirect to login
+      final authToken = stateManager.getGlobalState<String>('authToken');
+      if (authToken == null || authToken.isEmpty) {
+        // Redirect to login page if configured
+        final loginRoute = contract!.pagesUI.routes['/login'];
+        if (loginRoute != null) {
+          final page = contract!.pagesUI.pages[loginRoute.pageId];
+          if (page != null) {
+            return CupertinoPageRoute(
+              builder: (_) => EnhancedPageBuilder(config: page, trackedIds: _trackedIds),
+            );
+          }
+        }
         return CupertinoPageRoute(
           builder:
               (_) => const CupertinoPageScaffold(

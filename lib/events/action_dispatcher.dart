@@ -1,4 +1,5 @@
 // ignore_for_file: use_build_context_synchronously
+import 'dart:convert';
 import 'package:flutter/cupertino.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/config_models.dart';
@@ -12,6 +13,7 @@ import '../events/action_middleware.dart';
 class EnhancedActionDispatcher {
   static final ContractApiService _apiService = ContractApiService();
   static final EnhancedStateManager _stateManager = EnhancedStateManager();
+  static Map<String, dynamic>? _lastAdditionalData;
 
   /// Execute action based on configuration
   static Future<void> execute(
@@ -30,6 +32,9 @@ class EnhancedActionDispatcher {
       }
       bus.emit(ActionStarted(config.action, ctx));
       await middleware.runBefore(config, ctx);
+
+      // Keep track of the latest additional data (e.g., response)
+      _lastAdditionalData = additionalData;
 
       switch (config.action) {
         case 'navigate':
@@ -74,6 +79,12 @@ class EnhancedActionDispatcher {
         case 'clearCache':
           await _handleClearCache();
           break;
+        case 'sequence':
+          await _handleSequence(context, config, additionalData);
+          break;
+        case 'setAuthToken':
+          await _handleSetAuthToken(config, additionalData);
+          break;
         default:
           debugPrint('Unknown action: ${config.action}');
           break;
@@ -89,9 +100,9 @@ class EnhancedActionDispatcher {
       bus.emit(ActionFailed(config.action, e));
       debugPrint('Error executing action ${config.action}: $e');
 
-      // Execute error callback if provided
+      // Execute error callback if provided, passing error details
       if (config.onError != null) {
-        await execute(context, config.onError!);
+        await execute(context, config.onError!, {'error': e});
       } else {
         // Show default error
         await _showDefaultError(context, e.toString());
@@ -237,12 +248,81 @@ class EnhancedActionDispatcher {
   /// Resolve a single template string if it matches `${state.<key>}`.
   static String? _resolveTemplateString(String? value) {
     if (value == null) return null;
-    final regex = RegExp(r'^\$\{state\.(.+)\}$');
-    final match = regex.firstMatch(value);
-    if (match != null) {
-      final stateKey = match.group(1)!;
+    // Resolve full response object
+    if (value == '\${response}') {
+      if (_lastAdditionalData != null) {
+        final resp = _lastAdditionalData!['response'];
+        try {
+          return json.encode(resp);
+        } catch (_) {
+          return resp?.toString();
+        }
+      }
+    }
+    // Resolve full error object
+    if (value == '\${error}') {
+      if (_lastAdditionalData != null) {
+        final err = _lastAdditionalData!['error'];
+        try {
+          return err?.toString();
+        } catch (_) {
+          return err != null ? '$err' : null;
+        }
+      }
+    }
+    // Resolve from state
+    final stateRegex = RegExp(r'^\$\{state\.(.+)\}$');
+    final stateMatch = stateRegex.firstMatch(value);
+    if (stateMatch != null) {
+      final stateKey = stateMatch.group(1)!;
       final resolved = _stateManager.getState(stateKey);
       return resolved?.toString();
+    }
+    // Resolve from response
+    final respRegex = RegExp(r'^\$\{response\.(.+)\}$');
+    final respMatch = respRegex.firstMatch(value);
+    if (respMatch != null && _lastAdditionalData != null) {
+      final path = respMatch.group(1)!;
+      dynamic current = _lastAdditionalData!['response'];
+      for (final segment in path.split('.')) {
+        if (current is Map<String, dynamic>) {
+          current = current[segment];
+        } else {
+          current = null;
+          break;
+        }
+      }
+      return current?.toString();
+    }
+    // Resolve from error
+    final errRegex = RegExp(r'^\$\{error\.(.+)\}$');
+    final errMatch = errRegex.firstMatch(value);
+    if (errMatch != null && _lastAdditionalData != null) {
+      final path = errMatch.group(1)!;
+      dynamic current = _lastAdditionalData!['error'];
+      // Try common fields like message/statusCode via dynamic
+      if (current != null) {
+        try {
+          if (path == 'message') {
+            final msg = (current as dynamic).message;
+            if (msg != null) return msg.toString();
+          }
+          if (path == 'statusCode') {
+            final code = (current as dynamic).statusCode;
+            if (code != null) return code.toString();
+          }
+        } catch (_) {}
+      }
+      // If error is a map, resolve nested fields
+      for (final segment in path.split('.')) {
+        if (current is Map<String, dynamic>) {
+          current = current[segment];
+        } else {
+          current = null;
+          break;
+        }
+      }
+      return current?.toString();
     }
     return value;
   }
@@ -263,6 +343,11 @@ class EnhancedActionDispatcher {
 
     final scope = config.scope ?? config.params?['scope']?.toString();
 
+    // Resolve templates for string values
+    if (value is String) {
+      value = _resolveTemplateString(value);
+    }
+
     if (scope == 'global') {
       await _stateManager.setGlobalState(key, value);
     } else {
@@ -270,12 +355,43 @@ class EnhancedActionDispatcher {
     }
   }
 
+  static Future<void> _handleSequence(
+    BuildContext context,
+    ActionConfig config,
+    Map<String, dynamic>? additionalData,
+  ) async {
+    final steps = config.params?['steps'];
+    if (steps is List) {
+      for (final step in steps) {
+        if (step is Map<String, dynamic>) {
+          final next = ActionConfig.fromJson(step);
+          await execute(context, next, additionalData);
+        }
+      }
+    }
+  }
+
+  static Future<void> _handleSetAuthToken(
+    ActionConfig config,
+    Map<String, dynamic>? additionalData,
+  ) async {
+    dynamic value = config.value ?? config.params?['value'];
+    if (value is String) {
+      value = _resolveTemplateString(value);
+    }
+    if (value is! String || value.isEmpty) return;
+    // Update API service and global state
+    _apiService.setAuthToken(value);
+    await _stateManager.setGlobalState('authToken', value);
+  }
+
   static Future<void> _handleShowError(
     BuildContext context,
     ActionConfig config,
   ) async {
     final message =
-        config.params?['message']?.toString() ?? 'An error occurred';
+        _resolveTemplateString(config.params?['message']?.toString()) ??
+        'An error occurred';
 
     showCupertinoDialog(
       context: context,

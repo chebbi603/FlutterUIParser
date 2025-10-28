@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:async';
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'auth_service.dart';
 import '../models/config_models.dart';
 
 /// Enhanced API service with caching, retry policies, and contract validation
@@ -28,6 +30,18 @@ class EnhancedApiService {
 
   String? _extractBaseUrl() {
     // Extract base URL from environment or first service
+    String? envBase;
+    try {
+      if (dotenv.isInitialized) {
+        envBase = dotenv.env['API_BASE_URL'];
+      }
+    } catch (_) {
+      // DotEnv not initialized or unavailable; fall back below
+      envBase = null;
+    }
+    if (envBase != null && envBase.isNotEmpty) {
+      return envBase;
+    }
     if (_services.isNotEmpty) {
       final firstService = _services.values.first;
       final baseUrl = firstService.baseUrl;
@@ -635,11 +649,16 @@ class ApiException implements Exception {
 class ContractApiService {
   final EnhancedApiService _apiService = EnhancedApiService();
   CanonicalContract? _contract;
+  AuthService? _authService;
 
   /// Initialize with canonical contract
   void initialize(CanonicalContract contract) {
     _contract = contract;
     _apiService.initialize(contract);
+  }
+
+  void attachAuthService(AuthService authService) {
+    _authService = authService;
   }
 
   /// Set authentication token
@@ -664,18 +683,29 @@ class ContractApiService {
     Map<String, dynamic>? data,
     Map<String, dynamic>? params,
   }) async {
-    if (_contract == null) {
-      throw ApiException('Contract not initialized');
+    try {
+      final response = await _apiService.call<Map<String, dynamic>>(
+        service: service,
+        endpoint: endpoint,
+        data: data,
+        queryParams: params,
+      );
+      return response.data;
+    } on ApiException catch (e) {
+      if (e.statusCode == 401 && _authService != null) {
+        final refreshed = await _authService!.tryRefresh();
+        if (refreshed) {
+          final retry = await _apiService.call<Map<String, dynamic>>(
+            service: service,
+            endpoint: endpoint,
+            data: data,
+            queryParams: params,
+          );
+          return retry.data;
+        }
+      }
+      rethrow;
     }
-
-    final response = await _apiService.call<Map<String, dynamic>>(
-      service: service,
-      endpoint: endpoint,
-      data: data,
-      queryParams: params,
-    );
-
-    return response.data;
   }
 
   /// Fetch paginated list data

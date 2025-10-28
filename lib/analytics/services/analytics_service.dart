@@ -18,6 +18,9 @@ class AnalyticsService extends ChangeNotifier {
 
   /// Optional backend endpoint to POST batches to
   String? backendUrl;
+  String? wsUrl;
+  int batchSize = 50;
+  int flushIntervalMs = 5000;
 
   // --- Tagging configuration (defaults) ---
   int rageClickThreshold = 3; // clicks
@@ -33,9 +36,12 @@ class AnalyticsService extends ChangeNotifier {
   final Map<String, int> _lastSubmitTsByComponent = {};
   final Map<String, TrackingEvent> _lastSubmitByComponent = {};
 
-  /// Configure backend URL (optional)
-  void configure({String? backendUrl}) {
+  /// Configure backend URL and optional batch settings
+  void configure({String? backendUrl, String? wsUrl, int? batchSize, int? flushIntervalMs}) {
     this.backendUrl = backendUrl;
+    this.wsUrl = wsUrl;
+    if (batchSize != null && batchSize > 0) this.batchSize = batchSize;
+    if (flushIntervalMs != null && flushIntervalMs > 0) this.flushIntervalMs = flushIntervalMs;
   }
 
   /// Optional: update tagging thresholds
@@ -138,28 +144,35 @@ class AnalyticsService extends ChangeNotifier {
       return;
     }
 
-    final payload = jsonEncode(
-      events.map((e) => _formatEventForBackend(e)).toList(),
-    );
-
-    try {
-      final res = await http.post(
-        Uri.parse(backendUrl!),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: payload,
-      );
-
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        if (kDebugMode) print('🚀 Flushed ${events.length} events to backend');
-        events.clear();
-        notifyListeners();
-      } else {
-        if (kDebugMode) print('❌ Flush failed: ${res.statusCode} ${res.body}');
+    // Flush in batches to avoid oversized payloads
+    final all = events.map((e) => _formatEventForBackend(e)).toList();
+    int sent = 0;
+    while (sent < all.length) {
+      final chunk = all.sublist(sent, (sent + batchSize) > all.length ? all.length : (sent + batchSize));
+      final payload = jsonEncode(chunk);
+      try {
+        final res = await http.post(
+          Uri.parse(backendUrl!),
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: payload,
+        );
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          sent += chunk.length;
+        } else {
+          if (kDebugMode) print('❌ Flush failed: ${res.statusCode} ${res.body}');
+          break; // stop on failure
+        }
+      } catch (e) {
+        if (kDebugMode) print('❌ Flush error: $e');
+        break;
       }
-    } catch (e) {
-      if (kDebugMode) print('❌ Flush error: $e');
+    }
+    if (sent > 0) {
+      if (kDebugMode) print('🚀 Flushed $sent/${all.length} events to backend');
+      events.removeRange(0, sent);
+      notifyListeners();
     }
   }
 
