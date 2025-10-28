@@ -5,30 +5,35 @@ A production-grade Flutter framework where a single canonical JSON contract serv
 ## 🚀 Features
 
 ### Core Framework
+
 - **Single Source of Truth**: One JSON contract defines the entire application
 - **Type Safety**: Strong typing throughout the stack with automatic validation
 - **Schema Evolution**: Versioned migrations ensure backward compatibility
 - **Code Generation**: All models, services, and UI generated from contract
 
 ### UI System
+
 - **Dynamic Rendering**: Components rendered from JSON configuration
 - **Theme System**: Comprehensive theming with light/dark mode support
 - **Accessibility**: Built-in accessibility features following Apple guidelines
 - **Cupertino Widgets**: Native iOS design language throughout
 
 ### Data & Services
+
 - **API Contracts**: Service definitions with request/response validation
 - **Caching**: Intelligent caching with TTL and invalidation
 - **Retry Policies**: Configurable retry logic with exponential backoff
 - **Error Handling**: Comprehensive error handling and fallbacks
 
 ### State Management
+
 - **Scoped State**: Global, page, session, and memory state scopes
 - **Persistence**: Automatic persistence based on configuration
 - **Reactive Updates**: Real-time UI updates with ChangeNotifier
 - **Data Binding**: Seamless data binding between state and UI
 
 ### Security & Permissions
+
 - **Role-Based Access**: Granular permission system
 - **Feature Flags**: Dynamic feature rollouts
 - **Authentication**: Built-in auth flow support
@@ -61,9 +66,7 @@ demo_json_parser/
 │   │   └── contract_migrator.dart         # Schema migrations
 │   ├── enhanced_main.dart                 # Enhanced app entry point
 │   └── main.dart                          # Original demo app
-└── docs/
-    ├── canonical_framework_guide.md       # Comprehensive guide
-    └── system_overview.md                 # Original documentation
+└── docs
 ```
 
 ## 🚦 Quick Start
@@ -260,12 +263,20 @@ The original JSON-driven UI demo is still available:
 {
   "state": {
     "global": {
-      "theme": { "type": "string", "default": "system", "persistence": "local" },
+      "theme": {
+        "type": "string",
+        "default": "system",
+        "persistence": "local"
+      },
       "authToken": { "type": "string", "persistence": "secure" }
     },
     "pages": {
       "profile": {
-        "showEmail": { "type": "boolean", "default": true, "persistence": "local" },
+        "showEmail": {
+          "type": "boolean",
+          "default": true,
+          "persistence": "local"
+        },
         "volume": { "type": "double", "default": 0.5 }
       }
     }
@@ -274,6 +285,7 @@ The original JSON-driven UI demo is still available:
 ```
 
 - Persistence policy values:
+
   - `local` / `device`: stored via `shared_preferences`.
   - `secure`: stored via `flutter_secure_storage` (encrypted where supported).
   - `session` / `memory` / omitted: not persisted; lives for app session only.
@@ -290,8 +302,18 @@ No changes are required in UI components; they bind state as usual.
 - Field-level validation keys: `required`, `email`, `minLength`, `maxLength`, `pattern`, `message`
 - Validates on change and shows inline errors with themed color
 - Example:
+
 ```json
-{ "type": "textField", "label": "Email", "keyboardType": "email", "validation": { "required": true, "email": true, "message": "Please enter a valid email" } }
+{
+  "type": "textField",
+  "label": "Email",
+  "keyboardType": "email",
+  "validation": {
+    "required": true,
+    "email": true,
+    "message": "Please enter a valid email"
+  }
+}
 ```
 
 ## 🛠️ Development

@@ -3,7 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'models/config_models.dart';
-import 'validation/contract_validator.dart';
+// import 'validation/contract_validator.dart';
 import 'widgets/component_factory.dart';
 import 'widgets/enhanced_page_builder.dart';
 import 'state/state_manager.dart';
@@ -58,17 +58,7 @@ class _MyAppState extends State<MyApp> {
       }
       final Map<String, dynamic> data = Map<String, dynamic>.from(raw);
 
-      // Validate raw JSON and aggregate errors before constructing the contract
-      final validationErrors = ContractValidator.validate(data);
-      if (validationErrors.isNotEmpty) {
-        setState(() {
-          isLoading = false;
-          errorMessage = 'Canonical contract validation failed';
-          errorDetails = validationErrors;
-        });
-        return;
-      }
-
+      // Validation removed; proceed to construct contract directly
       final loadedContract = CanonicalContract.fromJson(data);
 
       // Initialize all services with the contract

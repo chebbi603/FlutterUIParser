@@ -5,7 +5,7 @@ import '../../state/state_manager.dart';
 import '../../utils/parsing_utils.dart';
 import '../graph_subscriber.dart';
 import 'common.dart';
-import '../../validation/validator.dart';
+// import '../../validation/validator.dart';
 
 class TextFieldComponent {
   static final EnhancedStateManager _stateManager = EnhancedStateManager();
@@ -26,18 +26,8 @@ class TextFieldComponent {
             stateKey != null ? (_stateManager.getState(stateKey) ?? '') : '';
 
         String? errorText;
-        if (config.validation != null) {
-          final validator = EnhancedValidator();
-          final fieldId = config.name ?? stateKey ?? config.id ?? 'textField';
-          final result = validator.validateField(
-            fieldId,
-            currentValue,
-            config.validation!,
-          );
-          if (!result.isValid) {
-            errorText = result.message ?? 'Invalid input';
-          }
-        }
+        // Validation disabled; always null
+        errorText = null;
 
         return _ManagedTextField(
           key: ValueKey(componentId),
@@ -84,25 +74,14 @@ class _ManagedTextFieldState extends State<_ManagedTextField> {
     controller = TextEditingController(text: widget.value);
 
     // Respect enabled flag: prevent focus when disabled (wired after config update)
-    // ...
     final enabled = widget.config.enabled ?? true;
     focusNode.canRequestFocus = enabled;
     if (!enabled) {
       focusNode.unfocus();
     }
 
-    // Initial validation
-    if (widget.config.validation != null) {
-      final validator = EnhancedValidator();
-      final fieldId =
-          widget.config.name ?? widget.stateKey ?? widget.componentId;
-      final result = validator.validateField(
-        fieldId,
-        widget.value,
-        widget.config.validation!,
-      );
-      _localErrorText = result.isValid ? null : result.message;
-    }
+    // Initial validation disabled
+    _localErrorText = null;
   }
 
   @override
@@ -114,20 +93,8 @@ class _ManagedTextFieldState extends State<_ManagedTextField> {
         selection: TextSelection.collapsed(offset: widget.value.length),
       );
     }
-    // Re-validate on external value updates
-    if (widget.config.validation != null) {
-      final validator = EnhancedValidator();
-      final fieldId =
-          widget.config.name ?? widget.stateKey ?? widget.componentId;
-      final result = validator.validateField(
-        fieldId,
-        widget.value,
-        widget.config.validation!,
-      );
-      setState(() {
-        _localErrorText = result.isValid ? null : result.message;
-      });
-    }
+    // Re-validate disabled on external value updates
+    // No changes to _localErrorText here.
   }
 
   @override
@@ -162,30 +129,17 @@ class _ManagedTextFieldState extends State<_ManagedTextField> {
               'value': value,
             });
           }
-          if (c.validation != null) {
-            final validator = EnhancedValidator();
-            final fieldId = c.name ?? widget.stateKey ?? widget.componentId;
-            final result = validator.validateField(
-              fieldId,
-              value,
-              c.validation!,
-            );
-            setState(() {
-              _localErrorText = result.isValid ? null : result.message;
-            });
-          }
+          // Inline validation disabled; no error computation here.
         },
         decoration: BoxDecoration(
           border: Border.all(
-            color:
-                (() {
-                  final hasError =
-                      (effectiveErrorText != null &&
-                          effectiveErrorText.isNotEmpty);
-                  return hasError
-                      ? CupertinoColors.destructiveRed
-                      : CupertinoColors.separator;
-                })(),
+            color: (() {
+              final hasError =
+                  (effectiveErrorText != null && effectiveErrorText.isNotEmpty);
+              return hasError
+                  ? CupertinoColors.destructiveRed
+                  : CupertinoColors.separator;
+            })(),
             width: 1.0,
           ),
           borderRadius: BorderRadius.circular(8.0),

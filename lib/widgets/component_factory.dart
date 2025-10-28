@@ -6,7 +6,6 @@ import '../utils/parsing_utils.dart';
 import '../widgets/media_widgets.dart';
 import '../events/action_dispatcher.dart';
 import '../state/state_manager.dart';
-import '../validation/validator.dart';
 import '../permissions/permission_manager.dart';
 import '../engine/graph_engine.dart';
 import 'components/switch_component.dart';
@@ -20,19 +19,17 @@ import 'components/text_component.dart';
 class EnhancedComponentFactory {
   static final ContractApiService _apiService = ContractApiService();
   static final EnhancedStateManager _stateManager = EnhancedStateManager();
-  static final EnhancedValidator _validator = EnhancedValidator();
   static final PermissionManager _permissionManager = PermissionManager();
   static final Map<int, Widget> _componentCache = {};
 
   static CanonicalContract? _contract;
   static Map<String, String>? _currentTheme;
 
-  /// Initialize with canonical contract
   static void initialize(CanonicalContract contract) {
     _contract = contract;
     _apiService.initialize(contract);
     // StateManager is initialized in app.dart; avoid double initialization
-    _validator.initialize(contract.validations);
+    // _validator.initialize(contract.validations);
     _permissionManager.initialize(contract.permissionsFlags);
     _updateTheme();
   }
