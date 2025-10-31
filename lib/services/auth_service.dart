@@ -1,5 +1,6 @@
 import '../state/state_manager.dart';
 import 'api_service.dart';
+import 'contract_loader.dart';
 
 class AuthService {
   final EnhancedStateManager _stateManager;
@@ -82,5 +83,7 @@ class AuthService {
     await _stateManager.setGlobalState('authToken', null);
     await _stateManager.setGlobalState('refreshToken', null);
     await _stateManager.setGlobalState('user', null);
+    // Clear locally cached contract on logout
+    await ContractLoader.clearCache();
   }
 }

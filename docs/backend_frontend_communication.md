@@ -5,7 +5,9 @@ This guide describes how the backend communicates with the Flutter frontend in t
 ## 1. Canonical Contract Delivery
 The frontend renders UI and wiring from a single JSON document (the "canonical contract"). The backend should expose an endpoint that returns the latest contract.
 
-- Endpoint: `GET /contracts/{appId}?version={semver}`
+- Endpoint (this repository): `GET /contracts/canonical` (public)
+- Alias (public): `GET /contracts/public/canonical` — identical response; provided to avoid dynamic route collisions.
+- Client fallback policy: The Flutter client first calls `/contracts/canonical` and, on `401` or `404`, falls back to `/contracts/public/canonical`. If both fail, it loads `assets/canonical_contract.json`.
 - Response: Canonical JSON with keys: `meta`, `services`, `pagesUI`, `state`, `eventsActions`, `themingAccessibility`, `assets`, `validations`, `permissionsFlags`, `pagination`, `analytics`.
 - Caching: Recommend `ETag` or `If-None-Match` support to avoid unnecessary downloads.
 - Versioning: Include `meta.version` and optionally `meta.apiSchemaVersion`.

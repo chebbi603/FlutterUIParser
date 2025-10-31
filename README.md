@@ -102,6 +102,17 @@ Edit `assets/canonical_contract.json` to see real-time changes in the app.
 - **[System Overview](docs/system_overview.md)**: Original system documentation
 - **[Contract Validator Usage](docs/contract_validator_usage.md)**: How to validate contracts and use the CLI
 
+## 🔌 Backend Integration
+
+- Base URL: `http://localhost:8081`
+- Canonical fetch flow:
+  - Primary: `GET /contracts/canonical` (public)
+  - Fallback: `GET /contracts/public/canonical` (public alias) when the primary returns `401` or `404` due to route collisions.
+  - Final fallback: load `assets/canonical_contract.json` when the backend is unavailable.
+- Emulator run (iOS):
+  - Launch the iOS Simulator (`open -a Simulator`) and run `flutter run`.
+  - Ensure your backend is running on `8081` to serve the canonical contract.
+
 ## 🔧 Configuration Examples
 
 ### Simple Page
