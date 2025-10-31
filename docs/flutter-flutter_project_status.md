@@ -1,3 +1,4 @@
+Project: demo_json_parser (Flutter)
 # Project Status and Architecture Guide
 
 This document provides a comprehensive overview of the project’s current status, architecture, directories, notable files, how they work, and known limitations. It serves as a living reference for contributors and reviewers to quickly understand health, behavior, and boundaries of the system.

@@ -1,3 +1,4 @@
+Project: demo_json_parser (Flutter)
 # System Overview
 
 This project is a JSON‑driven UI Kit built on Flutter’s Cupertino widgets. It renders screens from a JSON config without hardcoding widget trees, making it fast to iterate on UI and layout.

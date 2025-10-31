@@ -1,3 +1,4 @@
+Project: demo_json_parser (Flutter)
 # Enhanced Components Reference
 
 This document lists every component type rendered by `EnhancedComponentFactory` and how to configure them via `EnhancedComponentConfig`. It also explains common patterns: binding, events, validation, styling, permissions, and theming tokens.

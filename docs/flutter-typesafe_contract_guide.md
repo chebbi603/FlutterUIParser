@@ -1,3 +1,4 @@
+Project: demo_json_parser (Flutter)
 # Typesafe Canonical Contract Authoring Guide
 
 This guide explains how to author a robust, typesafe JSON contract that drives your Flutter UI, services, state, actions, theming, and permissions. It consolidates conventions from the DSL cheat sheet and the canonical framework guide into one practical reference.

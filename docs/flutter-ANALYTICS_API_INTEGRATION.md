@@ -1,3 +1,4 @@
+Project: demo_json_parser (Flutter)
 # Analytics Backend Integration (Flush‑Based)
 
 This document explains how tracked events are sent to a backend API using the simplified, flush‑based workflow.

@@ -1,3 +1,4 @@
+Project: demo_json_parser (Flutter)
 # Backend ↔ Frontend Communication Guide
 
 This guide describes how the backend communicates with the Flutter frontend in the JSON‑driven framework. It covers the canonical contract delivery, data/API calls, action execution patterns, state updates, error conventions, pagination, authentication, and analytics.
