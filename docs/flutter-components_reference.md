@@ -184,3 +184,26 @@ Many support nested `onSuccess`/`onError` and template variables `${state.<key>}
 - `lib/models/config_models.dart` — Strongly typed config models
 - `lib/widgets/component_factory.dart` — Rendering implementation
 - `lib/utils/parsing_utils.dart` — Parsing helpers (colors, keyboard types, icons)
+ - `lib/screens/offline_screen.dart` — Offline state screen with retry
+
+## Offline Screen (Utility)
+
+- Path: `lib/screens/offline_screen.dart`
+- Purpose: Displays a centered offline state when backend is unreachable.
+- Layout: Icon (`CupertinoIcons.wifi_slash`), primary message, secondary hint, optional debug error details, and a filled "Retry" button.
+- Props:
+  - `onRetry`: callback invoked when pressing "Retry".
+  - `errorMessage` (optional): detailed error shown only in non-release builds.
+  - `isConnected` (optional): shows "Connection: Online/Offline" indicator if provided.
+- Usage example:
+```dart
+Navigator.of(context).push(
+  CupertinoPageRoute(
+    builder: (_) => OfflineScreen(
+      onRetry: () => controller.refresh(),
+      errorMessage: lastError?.toString(),
+      isConnected: connectivityService.isOnline,
+    ),
+  ),
+);
+```

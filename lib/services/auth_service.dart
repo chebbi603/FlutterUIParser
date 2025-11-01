@@ -1,12 +1,19 @@
 import '../state/state_manager.dart';
 import 'api_service.dart';
 import 'contract_loader.dart';
+import '../providers/contract_provider.dart';
+import '../navigation/navigation_bridge.dart';
 
 class AuthService {
   final EnhancedStateManager _stateManager;
   final ContractApiService _apiService;
+  ContractProvider? _contractProvider;
 
   AuthService(this._stateManager, this._apiService);
+
+  void attachContractProvider(ContractProvider provider) {
+    _contractProvider = provider;
+  }
 
   Future<bool> login({required String email, required String password}) async {
     final response = await _apiService.call(
@@ -36,6 +43,15 @@ class AuthService {
         'id': userId,
         if (role != null) 'role': role,
       });
+    }
+
+    // Post-login: attempt personalized contract fetch
+    if (userId != null) {
+      try {
+        await _contractProvider?.loadUserContract(userId: userId, jwtToken: accessToken);
+      } catch (e) {
+        // Do not block login completion on contract errors
+      }
     }
     return true;
   }
@@ -79,11 +95,20 @@ class AuthService {
         );
       } catch (_) {}
     }
+
+    // Pre-logout: revert contract to canonical
+    try {
+      await _contractProvider?.loadCanonicalContract();
+    } catch (_) {}
+
     _apiService.clearAuthToken();
     await _stateManager.setGlobalState('authToken', null);
     await _stateManager.setGlobalState('refreshToken', null);
     await _stateManager.setGlobalState('user', null);
     // Clear locally cached contract on logout
     await ContractLoader.clearCache();
+
+    // Optional navigation to login route via tab bridge mapping
+    NavigationBridge.switchTo('/login');
   }
 }

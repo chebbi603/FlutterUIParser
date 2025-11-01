@@ -205,3 +205,23 @@ This guide explains how to author a robust, typesafe JSON contract that drives y
 
 ---
 This guide is designed to be living documentation. Extend it as your DSL evolves, and keep schema and examples in sync with the implementation.
+
+## Contract Result Wrapper
+
+- Path: `lib/models/contract_result.dart`
+- Purpose: Provide a typed wrapper for a contract payload with metadata describing origin and version for analytics and state management.
+- Types:
+  - `ContractSource` enum with values `canonical` and `personalized` (serializes to lowercase via `toString()`).
+  - `ContractResult` immutable model: `{ contract: Map<String,dynamic>, source: ContractSource, version: String, userId?: String }`.
+- Helpers:
+  - `isCanonical`, `isPersonalized` getters.
+  - `copyWith` for immutable updates.
+  - `factory ContractResult.fromBackendResponse(Map)` extracts `json` payload and common metadata keys: `source`, `version`, `userId` (supports `meta`, `metadata`, and inline fields).
+  - `toJson()` for logging/debug and analytics serialization.
+- Usage example:
+```dart
+final result = ContractResult.fromBackendResponse(responseMap);
+if (result.isPersonalized) {
+  analytics.track('contract_loaded', result.toJson());
+}
+```

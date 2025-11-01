@@ -3,6 +3,8 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/tracking_event.dart';
+import '../../providers/contract_provider.dart';
+import '../../state/state_manager.dart';
 
 /// Minimal AnalyticsService for Thesis PoC
 /// - Keeps an in-memory list of events
@@ -21,6 +23,20 @@ class AnalyticsService extends ChangeNotifier {
   String? wsUrl;
   int batchSize = 50;
   int flushIntervalMs = 5000;
+
+  // --- Contract & Auth context ---
+  ContractProvider? _contractProvider;
+  EnhancedStateManager? _stateManager;
+
+  /// Attach ContractProvider for contract metadata attribution
+  void attachContractProvider(ContractProvider provider) {
+    _contractProvider = provider;
+  }
+
+  /// Attach EnhancedStateManager to read current user id from global state
+  void attachStateManager(EnhancedStateManager manager) {
+    _stateManager = manager;
+  }
 
   // --- Tagging configuration (defaults) ---
   int rageClickThreshold = 3; // clicks
@@ -68,7 +84,13 @@ class AnalyticsService extends ChangeNotifier {
     notifyListeners();
     if (kDebugMode) {
       final type = event.type.toString().split('.').last;
-      print('📊 Tracked: $type (component=${event.componentId}, page=${event.pageId}, tag=${event.data['tag']})');
+      final tag = event.data['tag'];
+      final ct = _contractProvider?.contractSource?.toString().split('.').last ?? 'unknown';
+      final cv = _contractProvider?.contractVersion ?? 'unknown';
+      final ip = _contractProvider?.isPersonalized ?? false;
+      final userObj = _stateManager?.getGlobalState<Map<String, dynamic>>('user');
+      final currentUserId = userObj?['id']?.toString();
+      print('📊 Tracked: $type (component=${event.componentId}, page=${event.pageId}, tag=$tag, contractType=$ct, version=$cv, personalized=$ip, user=$currentUserId)');
     }
   }
 
@@ -146,6 +168,14 @@ class AnalyticsService extends ChangeNotifier {
 
     // Flush in batches to avoid oversized payloads
     final all = events.map((e) => _formatEventForBackend(e)).toList();
+    // Validate presence of contract metadata before sending
+    final missingMeta = all.where((m) =>
+        !m.containsKey('contractType') ||
+        !m.containsKey('contractVersion') ||
+        !m.containsKey('isPersonalized'));
+    if (missingMeta.isNotEmpty && kDebugMode) {
+      print('⚠️ Analytics flush: ${missingMeta.length} events missing contract metadata. Ensure AnalyticsService is attached to ContractProvider.');
+    }
     int sent = 0;
     while (sent < all.length) {
       final chunk = all.sublist(sent, (sent + batchSize) > all.length ? all.length : (sent + batchSize));
@@ -160,6 +190,15 @@ class AnalyticsService extends ChangeNotifier {
         );
         if (res.statusCode >= 200 && res.statusCode < 300) {
           sent += chunk.length;
+        } else if (res.statusCode == 401) {
+          if (kDebugMode) print('❌ Analytics flush unauthorized (401).');
+          final hasAuthedEvents = chunk.any((ev) => ev['userId'] != null);
+          if (hasAuthedEvents) {
+            if (kDebugMode) print('🧹 Clearing event queue due to auth failure for authenticated events');
+            events.clear();
+            notifyListeners();
+          }
+          break; // stop on auth failure
         } else {
           if (kDebugMode) print('❌ Flush failed: ${res.statusCode} ${res.body}');
           break; // stop on failure
@@ -251,11 +290,19 @@ class AnalyticsService extends ChangeNotifier {
 
   Map<String, dynamic> _formatEventForBackend(TrackingEvent e) {
     final typeStr = e.type.toString().split('.').last;
+    final userObj = _stateManager?.getGlobalState<Map<String, dynamic>>('user');
+    final currentUserId = userObj?['id']?.toString();
     final out = <String, dynamic>{
       'timestamp': e.timestamp.millisecondsSinceEpoch,
+      'sessionId': e.sessionId,
+      'userId': currentUserId ?? e.userId, // always include, may be null
       'componentId': e.componentId ?? 'unknown',
       'eventType': typeStr,
     };
+    // Contract metadata
+    out['contractType'] = e.data['contractType'] ?? 'unknown';
+    out['contractVersion'] = e.data['contractVersion'] ?? 'unknown';
+    out['isPersonalized'] = e.data['isPersonalized'] ?? false;
     // Optional tags
     if (e.data.containsKey('tag')) out['tag'] = e.data['tag'];
     if (e.data.containsKey('repeatCount')) out['repeatCount'] = e.data['repeatCount'];

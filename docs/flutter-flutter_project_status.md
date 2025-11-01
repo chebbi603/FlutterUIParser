@@ -7,7 +7,7 @@ This document provides a comprehensive overview of the project’s current statu
 
 - Build: `flutter analyze` reports no issues.
 - Tests: All current test suites pass.
- - Runtime: Designed to run with `flutter run` (iOS simulator available). No contract validation module is active in runtime. Canonical contract retrieval first calls `/contracts/canonical` (public), falls back to `/contracts/public/canonical` on `401`/`404`, and ultimately loads `assets/canonical_contract.json` when backend is unreachable.
+- Runtime: Designed to run with `flutter run` (iOS simulator available). No contract validation module is active in runtime. Canonical contract retrieval first calls `/contracts/canonical` (public), falls back to `/contracts/public/canonical` on `401`/`404`. There is no local asset fallback; ensure backend availability or mock HTTP in tests.
 - Coverage: `coverage/lcov.info` exists but may reference now-removed files; regenerate coverage to reflect the latest state.
 - Documentation: Extensive docs exist; some legacy mentions of the removed validation module remain and are noted below.
 
@@ -43,7 +43,7 @@ Other root files:
 ## Core App Flow
 
 - Entry point: `lib/main.dart` initializes the Flutter app and constructs the root `App` widget.
-- Application bootstrap: `lib/app.dart` loads the canonical JSON contract from `assets/canonical_contract.json`. It previously performed contract-wide validation; that logic has been removed, and the app now directly builds UI from the loaded contract.
+- Application bootstrap: `lib/app.dart` loads the canonical JSON contract from the backend via `ContractService`. Contract-wide validation remains removed; the app directly builds UI from the fetched contract.
 - Page building: `lib/widgets/enhanced_page_builder.dart` takes parsed contract pages and composes the widget tree, augmenting it with analytics tracking and common behaviors.
 - State/reactivity: `lib/engine/graph_engine.dart` manages a dependency graph between state keys and UI components, and `lib/widgets/graph_subscriber.dart` subscribes widgets to state changes for reactive updates.
 - Actions and events: `lib/events/action_dispatcher.dart` executes actions defined in the contract (e.g., `navigate`, `apiCall`, `updateState`), optionally passing parameters. `lib/events/action_middleware.dart` can intercept and augment action lifecycles, and `lib/events/event_bus.dart` provides a lightweight pub/sub for app events.
@@ -58,10 +58,7 @@ Other root files:
 
 ### Assets
 
-- `assets/canonical_contract.json`
-  - Role: The primary contract describing pages, components, routes, services, and state.
-  - How it works: Loaded at app startup and used to drive UI and behavior.
-  - Limitations: No active runtime-wide contract validation; malformed entries can lead to runtime errors.
+- (No local canonical contract file) The canonical contract is sourced from the backend; there is no asset fallback.
 
 - `assets/canonical_contract.schema.json`
   - Role: JSON Schema describing expected shape of the contract.

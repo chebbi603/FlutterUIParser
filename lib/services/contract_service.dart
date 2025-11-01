@@ -2,15 +2,15 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
+import 'package:demo_json_parser/models/contract_result.dart';
 
 /// ContractService handles fetching the canonical contract JSON from the backend
 /// with a robust fallback strategy and clear error logging.
 ///
 /// - Primary endpoint: `GET {baseUrl}/contracts/canonical`
 /// - Fallback endpoint: `GET {baseUrl}/contracts/public/canonical`
-/// - Final fallback: load local asset `assets/canonical_contract.json`
+/// - No local asset fallback: backend must be available
 ///
 /// The service enforces a 10-second timeout and sets `Accept: application/json`.
 class ContractService {
@@ -25,11 +25,12 @@ class ContractService {
   })  : _client = client ?? http.Client(),
         _timeout = timeout ?? const Duration(seconds: 10);
 
-  /// Fetch canonical contract as a JSON map.
+  /// Fetch canonical contract and return as a ContractResult.
   ///
-  /// Returns the parsed map from backend when available, otherwise falls back
-  /// to bundled asset `assets/canonical_contract.json`.
-  Future<Map<String, dynamic>> fetchCanonicalContract() async {
+  /// Primary endpoint: `/contracts/canonical`
+  /// Fallback endpoint: `/contracts/public/canonical`
+  /// No local asset fallback. Throws on failure.
+  Future<ContractResult> fetchCanonicalContract() async {
     // 1) Try primary backend endpoint
     try {
       final primaryUrl = _buildUrl('/contracts/canonical');
@@ -40,9 +41,16 @@ class ContractService {
 
       if (response.statusCode == 200) {
         _log('Primary endpoint succeeded (200)');
-        return _parseJsonToMap(response.body, source: 'primary response');
+        final map = _parseJsonToMap(response.body, source: 'primary response');
+        _validateContractStructure(map);
+        final version = _extractVersion(map);
+        return ContractResult(
+          contract: map,
+          source: ContractSource.canonical,
+          version: version,
+        );
       } else {
-        _log('Primary endpoint non-200: ${response.statusCode}');
+        _logHttpFailure('fetchCanonicalContract', primaryUrl, response);
       }
     } on TimeoutException catch (e) {
       _log('Primary endpoint timed out: $e');
@@ -65,9 +73,16 @@ class ContractService {
 
       if (response.statusCode == 200) {
         _log('Fallback endpoint succeeded (200)');
-        return _parseJsonToMap(response.body, source: 'fallback response');
+        final map = _parseJsonToMap(response.body, source: 'fallback response');
+        _validateContractStructure(map);
+        final version = _extractVersion(map);
+        return ContractResult(
+          contract: map,
+          source: ContractSource.canonical,
+          version: version,
+        );
       } else {
-        _log('Fallback endpoint non-200: ${response.statusCode}');
+        _logHttpFailure('fetchCanonicalContract', fallbackUrl, response);
       }
     } on TimeoutException catch (e) {
       _log('Fallback endpoint timed out: $e');
@@ -79,29 +94,17 @@ class ContractService {
       _log('Fallback endpoint error: $e');
     }
 
-    // 3) Final fallback: local bundled asset
-    try {
-      _log('Loading local asset: assets/canonical_contract.json');
-      final assetString = await rootBundle
-          .loadString('assets/canonical_contract.json')
-          .timeout(_timeout);
-      final map = _parseAssetToMap(assetString);
-      _log('Local asset loaded successfully');
-      return map;
-    } on TimeoutException catch (e) {
-      _log('Asset load timed out: $e');
-      rethrow;
-    } on FormatException catch (e) {
-      _log('Asset JSON malformed: $e');
-      rethrow;
-    } catch (e) {
-      _log('Asset load error: $e');
-      rethrow;
-    }
+    // 3) No local fallback: propagate failure
+    _log('All backend endpoints failed; backend unavailable. Throwing error.');
+    throw Exception('Backend unavailable: failed to fetch canonical contract');
   }
 
   Map<String, String> get _jsonHeaders => const {
         'Accept': 'application/json',
+      };
+  Map<String, String> _authHeaders(String jwtToken) => {
+        ..._jsonHeaders,
+        'Authorization': 'Bearer $jwtToken',
       };
 
   /// Build a properly joined URL from base and path.
@@ -120,24 +123,93 @@ class ContractService {
       if (decoded.containsKey('json')) {
         final dynamic inner = decoded['json'];
         if (inner is Map) {
-          return Map<String, dynamic>.from(inner as Map);
+          return Map<String, dynamic>.from(inner);
         } else {
           throw const FormatException('Wrapper json field must be an object');
         }
       }
       // No wrapper; treat the object itself as canonical
-      return Map<String, dynamic>.from(decoded as Map);
+      return Map<String, dynamic>.from(decoded);
     }
     throw const FormatException('Expected a JSON object');
   }
 
-  Map<String, dynamic> _parseAssetToMap(String body) {
-    final dynamic decoded = json.decode(body);
-    if (decoded is Map) {
-      return Map<String, dynamic>.from(decoded as Map);
+  /// Validate that required root objects exist to prevent downstream UI errors.
+  void _validateContractStructure(Map<String, dynamic> contract) {
+    final hasMeta = contract['meta'] is Map;
+    final hasPages = contract['pagesUI'] is Map;
+    if (!hasMeta || !hasPages) {
+      throw const FormatException('Contract validation failed: missing meta/pagesUI');
     }
-    throw const FormatException('Asset canonical_contract.json must be a JSON object');
   }
+
+  /// Extract version from `meta.version`, defaulting to "unknown" if absent.
+  String _extractVersion(Map<String, dynamic> contract) {
+    try {
+      final meta = contract['meta'] as Map<String, dynamic>?;
+      final v = meta?['version'];
+      if (v is String && v.isNotEmpty) return v;
+    } catch (_) {}
+    return 'unknown';
+  }
+
+  /// Fetch a personalized user-specific contract using JWT authentication.
+  ///
+  /// Endpoint: `/users/{userId}/contract`
+  /// - Adds `Authorization: Bearer <jwtToken>`
+  /// - On 401: throws AuthenticationException
+  /// - On 404: falls back to canonical contract
+  Future<ContractResult> fetchUserContract({
+    required String userId,
+    required String jwtToken,
+  }) async {
+    final url = _buildUrl('/users/$userId/contract');
+    _log('Attempting user contract: GET $url');
+    try {
+      final response = await _client
+          .get(url, headers: _authHeaders(jwtToken))
+          .timeout(_timeout);
+
+      if (response.statusCode == 200) {
+        _log('User contract succeeded (200)');
+        final map = _parseJsonToMap(response.body, source: 'user response');
+        _validateContractStructure(map);
+        final version = _extractVersion(map);
+        return ContractResult(
+          contract: map,
+          source: ContractSource.personalized,
+          version: version,
+          userId: userId,
+        );
+      }
+
+      if (response.statusCode == 401) {
+        _logHttpFailure('fetchUserContract', url, response);
+        throw AuthenticationException('JWT invalid or expired');
+      }
+      if (response.statusCode == 404) {
+        _log('[fetchUserContract] 404 Not Found → falling back to canonical');
+        return await fetchCanonicalContract();
+      }
+
+      _logHttpFailure('fetchUserContract', url, response);
+      throw Exception('User contract request failed: ${response.statusCode}');
+    } on TimeoutException catch (e) {
+      _log('User contract timed out: $e');
+      rethrow;
+    } on FormatException catch (e) {
+      _log('User contract returned malformed JSON: $e');
+      rethrow;
+    } on http.ClientException catch (e) {
+      _log('User contract client error: $e');
+      rethrow;
+    } catch (e) {
+      _log('User contract error: $e');
+      rethrow;
+    }
+  }
+
+  // No asset parsing in backend-only mode.
 
   void _log(String message) {
     if (kDebugMode) {
@@ -145,4 +217,16 @@ class ContractService {
       debugPrint('[ContractService] $message');
     }
   }
+
+  void _logHttpFailure(String method, Uri url, http.Response response) {
+    _log('[$method] HTTP ${response.statusCode} for $url → ${response.body.length} bytes');
+  }
+}
+
+/// Semantic exception for authentication failures.
+class AuthenticationException implements Exception {
+  final String message;
+  AuthenticationException(this.message);
+  @override
+  String toString() => 'AuthenticationException: $message';
 }

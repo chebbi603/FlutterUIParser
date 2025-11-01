@@ -136,9 +136,12 @@ flutter run -d chrome --dart-define=API_URL=http://localhost:8081
 
 Startup sequence:
 - `main.dart` calls `WidgetsFlutterBinding.ensureInitialized()` and loads `.env` if present.
-- Resolves `API_URL` and uses `ContractService(baseUrl)` to fetch the canonical contract before booting.
-- Configures analytics by reading `analytics.backendUrl` from the loaded contract and calling `AnalyticsService().configure()`.
-- Passes the loaded contract map into `MyApp(initialContractMap: ...)`, which bootstraps the widget tree and distributes contract data.
+- Resolves `API_URL` and creates a `ContractService(baseUrl)`.
+- Wraps the app with `MultiProvider`, creating `ContractProvider(service: contractService)`; no blocking network fetch occurs in `main.dart`.
+- `MyApp` is a `StatefulWidget` that defers `provider.loadCanonicalContract()` until after the first frame via `WidgetsBinding.instance.addPostFrameCallback`.
+- During initial load, `MyApp` shows a lightweight splash (activity indicator). On error, it shows `OfflineScreen` with Retry.
+- Once the contract loads, `MyApp` initializes `EnhancedStateManager`, `ContractApiService`, `PermissionManager`, `EnhancedComponentFactory`, and configures `AnalyticsService` using `contract.analytics.backendUrl`.
+- Navigation and overlays are provided by `CupertinoApp` (with `navigatorKey`) after the contract is applied.
 
 ## 🔧 Configuration Examples
 

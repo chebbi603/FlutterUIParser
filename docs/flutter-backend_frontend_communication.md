@@ -8,7 +8,7 @@ The frontend renders UI and wiring from a single JSON document (the "canonical c
 
 - Endpoint (this repository): `GET /contracts/canonical` (public)
 - Alias (public): `GET /contracts/public/canonical` — identical response; provided to avoid dynamic route collisions.
-- Client fallback policy: The Flutter client first calls `/contracts/canonical` and, on `401` or `404`, falls back to `/contracts/public/canonical`. If both fail, it loads `assets/canonical_contract.json`.
+- Client fallback policy: The Flutter client first calls `/contracts/canonical` and, on non-200, falls back to `/contracts/public/canonical`. There is no local asset fallback; ensure backend availability or mock HTTP for tests.
 - Response: Canonical JSON with keys: `meta`, `services`, `pagesUI`, `state`, `eventsActions`, `themingAccessibility`, `assets`, `validations`, `permissionsFlags`, `pagination`, `analytics`.
 - Caching: Recommend `ETag` or `If-None-Match` support to avoid unnecessary downloads.
 - Versioning: Include `meta.version` and optionally `meta.apiSchemaVersion`.
@@ -32,7 +32,15 @@ Example (truncated):
 }
 ```
 
-## 2. Service & Endpoint Configuration
+## 2. Personalized Contract Delivery
+- Endpoint: `GET /users/{userId}/contract` (requires JWT)
+- Headers: `Authorization: Bearer <token>` and `Accept: application/json`
+- Responses:
+  - `200` → personalized contract payload (same shape as canonical)
+  - `401` → invalid/expired token (client throws `AuthenticationException`)
+  - `404` → user has no personalized contract; client falls back to canonical
+
+## 3. Service & Endpoint Configuration
 The contract defines named `services` and their `endpoints`. The frontend resolves API calls using these names.
 
 - Fields per endpoint: `method` (GET, POST, etc.), `path`, optional `headers`, `queryParams`, `caching`.

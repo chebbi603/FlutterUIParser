@@ -24,6 +24,9 @@ Configure service and pass tracked IDs when building pages:
 // app.dart
 final service = AnalyticsService();
 service.configure(backendUrl: contract.analytics?.backendUrl);
+// Attach providers to enable contract/auth attribution
+service.attachContractProvider(provider);
+service.attachStateManager(stateManager);
 final trackedIds = contract.analytics?.trackedComponents ?? const [];
 
 return EnhancedPageBuilder(
@@ -68,6 +71,16 @@ AnalyticsService().trackPageNavigation(pageId: 'login', eventType: TrackingEvent
 - Optional: `tag` (`rage_click` | `rapid_repeat`), `repeatCount`.
 - For `formSubmit`: include `result` (`success` | `fail`) and optional `error`.
 
+### Attribution Metadata (added)
+- `contractType`: `canonical` or `personalized` (string; default `unknown`)
+- `contractVersion`: semantic version from contract (string; default `unknown`)
+- `isPersonalized`: whether the active contract is personalized (boolean)
+- `userId`: current user id from `EnhancedStateManager.getGlobalState('user').id` (string or null)
+
+Notes:
+- Metadata is added at formatting time inside `AnalyticsService.flush()` and is not mutating `TrackingEvent.data`.
+- Ensure `AnalyticsService.attachContractProvider()` and `.attachStateManager()` are called before tracking/flush to populate these fields.
+
 Example:
 ```json
 [
@@ -83,6 +96,12 @@ Example:
 await AnalyticsService().flush();
 ```
 If no `backendUrl` is set, events remain in memory and are printed in debug builds.
+
+### Flush Behavior (updated)
+- Missing `backendUrl`: logs a warning and keeps events queued.
+- 2xx responses: removes successfully sent events from memory.
+- `401 Unauthorized`: stops flush; if any event has `userId`, clears the in-memory queue to prevent retry storms.
+- Validation: warns when events are missing `contractType`, `contractVersion`, or `isPersonalized` (ensure attachments).
 
 ## FAQs
 - Where do events go?

@@ -1,29 +1,26 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+// Dotenv is no longer needed in app initialization; environment resolution happens in main.dart
 import 'models/config_models.dart';
 import 'widgets/enhanced_page_builder.dart';
 import 'state/state_manager.dart';
 import 'services/api_service.dart';
-import 'services/contract_loader.dart';
 import 'services/auth_service.dart';
 import 'permissions/permission_manager.dart';
 import 'navigation/navigation_bridge.dart';
 import 'utils/parsing_utils.dart';
 import 'widgets/component_factory.dart';
 import 'providers/contract_provider.dart';
+import 'screens/offline_screen.dart';
 import 'analytics/services/analytics_service.dart';
 import 'analytics/models/tracking_event.dart';
 
-// Note: AnalyticsService configuration is done in main.dart from the loaded contract.
+// Note: AnalyticsService configuration now happens when contract loads inside MyApp.
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key, required this.initialContractMap});
-
-  final Map<String, dynamic> initialContractMap;
+  const MyApp({super.key});
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -31,18 +28,14 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   CanonicalContract? contract;
-  bool isLoading = true;
-  String? errorMessage;
-  List<String>? errorDetails;
 
   final EnhancedStateManager stateManager = EnhancedStateManager();
   final ContractApiService apiService = ContractApiService();
   final PermissionManager permissionManager = PermissionManager();
-  final ContractLoader _contractLoader = ContractLoader();
+  final GlobalKey<NavigatorState> _navKey = GlobalKey<NavigatorState>();
   CupertinoTabController? _tabController;
   Set<String> _trackedIds = {};
   OverlayEntry? _toastEntry;
-  CanonicalContract? _pendingUpdate;
   String? _currentVersion;
   String? _lastAuthToken;
   String? _lastUserId;
@@ -51,40 +44,37 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    _bootstrapFromInitialMap();
-    // Attach provider listener after first frame when provider is available
+    // React to auth token/user changes to refresh contract on login/logout
+    stateManager.addListener(_onStateChanged);
+    // Attach provider listener and defer initial canonical load until first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _attachProviderListener();
+      try {
+        final provider = Provider.of<ContractProvider>(context, listen: false);
+        provider.loadCanonicalContract();
+      } catch (_) {
+        // Provider not yet available; try again next frame
+        WidgetsBinding.instance.addPostFrameCallback((__) {
+          if (!mounted) return;
+          final provider = Provider.of<ContractProvider>(context, listen: false);
+          provider.loadCanonicalContract();
+        });
+      }
     });
   }
 
-  Future<void> _bootstrapFromInitialMap() async {
+  @override
+  void dispose() {
+    // Detach listeners and clean up controllers/overlays
     try {
-      final parsed = CanonicalContract.fromJson(widget.initialContractMap);
-      await _initializeWithContract(parsed, initState: true);
-      setState(() {
-        contract = parsed;
-        isLoading = false;
-        errorMessage = null;
-        errorDetails = null;
-      });
-      _currentVersion = parsed.meta.version;
-
-      // Observe auth changes to fetch user-specific contract post-login
-      stateManager.addListener(_onStateChanged);
-
-      // Attempt API refresh immediately if already authenticated (user-specific)
-      // This can update the UI with a user-specific contract when available.
-      unawaited(_attemptApiRefresh());
-    } catch (e, st) {
-      final lines = st.toString().split('\n').take(12).toList();
-      setState(() {
-        isLoading = false;
-        errorMessage = 'Error initializing contract: $e';
-        errorDetails = lines;
-      });
-      debugPrint('Error initializing contract: $e');
-    }
+      final provider = Provider.of<ContractProvider>(context, listen: false);
+      provider.removeListener(_onProviderChanged);
+    } catch (_) {}
+    stateManager.removeListener(_onStateChanged);
+    _toastEntry?.remove();
+    _toastEntry = null;
+    _tabController?.dispose();
+    super.dispose();
   }
 
   void _attachProviderListener() {
@@ -110,9 +100,11 @@ class _MyAppState extends State<MyApp> {
     if (err != null && err.isNotEmpty) {
       _showToast('Refresh failed: $err');
     }
-    final updated = provider.contract;
-    if (updated != null) {
+    final updatedMap = provider.contract;
+    if (updatedMap != null) {
+      final updated = CanonicalContract.fromJson(updatedMap);
       final newVersion = updated.meta.version;
+      // Apply on first load or version change
       if (_currentVersion == null || newVersion != _currentVersion) {
         unawaited(_applyUpdatedContract(updated));
       }
@@ -130,14 +122,32 @@ class _MyAppState extends State<MyApp> {
     // Attach auth service and restore persisted tokens
     final authService = AuthService(stateManager, apiService);
     apiService.attachAuthService(authService);
+    // Provide ContractProvider to AuthService for post-login/logout contract switching
+    try {
+      final provider = Provider.of<ContractProvider>(context, listen: false);
+      authService.attachContractProvider(provider);
+    } catch (_) {}
     final persistedAccess = stateManager.getGlobalState<String>('authToken');
     if (persistedAccess != null && persistedAccess.isNotEmpty) {
       apiService.setAuthToken(persistedAccess);
     }
 
     // Set tracked component ids for analytics widgets; actual AnalyticsService
-    // configuration happens in main.dart to avoid duplication.
+    // configuration happens here once a contract is available.
     _trackedIds = loadedContract.analytics?.trackedComponents.toSet() ?? {};
+
+    // Configure analytics backend if provided by contract
+    final analyticsBackend = loadedContract.analytics?.backendUrl?.trim();
+    if (analyticsBackend != null && analyticsBackend.isNotEmpty) {
+      final analytics = AnalyticsService();
+      analytics.configure(backendUrl: analyticsBackend);
+      // Attach context providers for attribution
+      try {
+        final provider = Provider.of<ContractProvider>(context, listen: false);
+        analytics.attachContractProvider(provider);
+      } catch (_) {}
+      analytics.attachStateManager(stateManager);
+    }
 
     // Execute app start events (simplified logging)
     if (loadedContract.eventsActions.onAppStart != null) {
@@ -148,7 +158,7 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _attemptApiRefresh() async {
-    if (_isRefreshing || contract == null) return;
+    if (_isRefreshing) return;
     final token = stateManager.getGlobalState<String>('authToken');
     final userObj = stateManager.getGlobalState<Map<String, dynamic>>('user');
     final userId = userObj?['id']?.toString();
@@ -158,47 +168,23 @@ class _MyAppState extends State<MyApp> {
 
     _isRefreshing = true;
     try {
-      final baseUrl = _resolveBaseUrl(contract!);
-      final fetched = await _contractLoader.fetchFromApi(
-        baseUrl: baseUrl,
-        userId: userId,
-        authToken: token,
-      );
-      if (fetched != null) {
-        await _applyUpdatedContract(fetched);
-      } else {
-        _showToast('Using offline version, will sync when online');
-        _contractLoader.scheduleRetry(() async {
-          await _attemptApiRefresh();
-        });
-      }
-      // Start background polling (optional enhancement)
-      _contractLoader.startPolling(
-        baseUrl: baseUrl,
-        userId: userId,
-        authToken: token,
-        currentVersion: _currentVersion ?? contract!.meta.version,
-        onUpdate: (newContract) {
-          // Don't force reload; ask user for consent
-          _pendingUpdate = newContract;
-          _showUpdateDialog();
-        },
-      );
+      final provider = Provider.of<ContractProvider>(context, listen: false);
+      await provider.loadUserContract(userId: userId, jwtToken: token);
     } finally {
       _isRefreshing = false;
     }
   }
 
   Future<void> _applyUpdatedContract(CanonicalContract newContract) async {
-    // Reinitialize API + permissions + factory without resetting state
-    await _initializeWithContract(newContract, initState: false);
+    // Reinitialize API + permissions + factory (initialize state on first load)
+    await _initializeWithContract(newContract, initState: contract == null);
     setState(() {
       contract = newContract;
       _currentVersion = newContract.meta.version;
-      errorMessage = null;
-      errorDetails = null;
     });
-    _showToast('UI updated from server');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _showToast('UI updated from server');
+    });
   }
 
   void _onStateChanged() {
@@ -213,30 +199,11 @@ class _MyAppState extends State<MyApp> {
     }
   }
 
-  String _resolveBaseUrl(CanonicalContract c) {
-    String? envBase;
-    try {
-      envBase = dotenv.isInitialized ? dotenv.env['API_BASE_URL'] : null;
-    } catch (_) {
-      envBase = null;
-    }
-    if (envBase != null && envBase.isNotEmpty) return envBase;
-    final authService = c.services['auth'];
-    final base = authService?.baseUrl ?? c.services.values.first.baseUrl;
-    return _replaceEnvVars(base);
-  }
-
-  String _replaceEnvVars(String s) {
-    return s.replaceAllMapped(RegExp(r'\$\{([^}]+)\}'), (m) {
-      final key = m.group(1)!;
-      final val = dotenv.isInitialized ? dotenv.env[key] : null;
-      return (val != null && val.isNotEmpty) ? val : 'https://api.example.com';
-    });
-  }
+  // Base URL resolution moved to main.dart; contract-specific services read directly from the contract.
 
   void _showToast(String message) {
     if (!mounted) return;
-    final overlay = Overlay.of(context);
+    final overlay = _navKey.currentState?.overlay;
     if (overlay == null) return;
     _toastEntry?.remove();
     _toastEntry = OverlayEntry(
@@ -280,90 +247,30 @@ class _MyAppState extends State<MyApp> {
     });
   }
 
-  void _showUpdateDialog() {
-    if (!mounted || _pendingUpdate == null) return;
-    showCupertinoDialog(
-      context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: const Text('Update Available'),
-        content: const Text('A newer UI contract is available. Reload now?'),
-        actions: [
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () async {
-              Navigator.of(ctx, rootNavigator: true).pop();
-              final next = _pendingUpdate;
-              _pendingUpdate = null;
-              if (next != null) {
-                await _applyUpdatedContract(next);
-              }
-            },
-            child: const Text('Reload'),
-          ),
-          CupertinoDialogAction(
-            isDestructiveAction: false,
-            onPressed: () {
-              Navigator.of(ctx, rootNavigator: true).pop();
-              // Keep pending update; user can reload later via background polling
-            },
-            child: const Text('Later'),
-          ),
-        ],
-      ),
-    );
-  }
+  
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading) {
-      return const CupertinoApp(
-        home: CupertinoPageScaffold(
-          child: Center(child: CupertinoActivityIndicator()),
-        ),
-        debugShowCheckedModeBanner: false,
-      );
-    }
-
-    if (errorMessage != null) {
-      return CupertinoApp(
-        home: CupertinoPageScaffold(
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(
-                  CupertinoIcons.exclamationmark_triangle,
-                  size: 48,
-                  color: CupertinoColors.destructiveRed,
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Failed to Load App',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 32),
-                  child: Text(
-                    errorMessage!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: CupertinoColors.secondaryLabel,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        debugShowCheckedModeBanner: false,
-      );
-    }
+    final provider = Provider.of<ContractProvider>(context);
 
     if (contract == null) {
+      if (provider.loading) {
+        return const CupertinoApp(
+          home: CupertinoPageScaffold(
+            child: Center(child: CupertinoActivityIndicator()),
+          ),
+          debugShowCheckedModeBanner: false,
+        );
+      }
+      if (provider.error != null && provider.error!.trim().isNotEmpty) {
+        return CupertinoApp(
+          home: OfflineScreen(
+            onRetry: () => Provider.of<ContractProvider>(context, listen: false).loadCanonicalContract(),
+            errorMessage: provider.error,
+          ),
+          debugShowCheckedModeBanner: false,
+        );
+      }
       return const CupertinoApp(
         home: CupertinoPageScaffold(
           child: Center(child: Text('No contract loaded')),
@@ -372,9 +279,10 @@ class _MyAppState extends State<MyApp> {
       );
     }
 
-    return ChangeNotifierProvider.value(
+  return ChangeNotifierProvider.value(
       value: stateManager,
       child: CupertinoApp(
+        navigatorKey: _navKey,
         title: contract!.meta.appName,
         debugShowCheckedModeBanner: false,
         theme: _buildTheme(),
