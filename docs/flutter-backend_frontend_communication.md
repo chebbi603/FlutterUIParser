@@ -162,3 +162,27 @@ If live updates are required, define one of:
 - Dates use ISO 8601 (`YYYY-MM-DD`).
 - Analytics payloads use milliseconds since epoch (`timestamp`).
 - Terminology is consistent: `service`, `endpoint`, `componentId`, `eventType`, `backendUrl`.
+## Update: Event Enrichment (2025-11-01)
+- Client now enriches analytics events with:
+  - `pageScope`: `public` | `authenticated` (computed from contract `routes[*].auth`, bottom nav `authRequired`, or heuristics)
+  - `contractType`: `canonical` | `personalized` | `unknown`
+  - `contractVersion`: semantic version string
+  - `isPersonalized`: boolean
+  - `userId`: optional string when available
+- Purpose: enable backend segmentation and funnel analysis per authentication scope and contract source.
+
+Example payload (tap on Login button):
+```json
+[
+  {
+    "timestamp": 1681836102000,
+    "componentId": "login_button",
+    "eventType": "tap",
+    "pageId": "login",
+    "pageScope": "public",
+    "contractType": "canonical",
+    "contractVersion": "1.0.0",
+    "isPersonalized": false
+  }
+]
+```

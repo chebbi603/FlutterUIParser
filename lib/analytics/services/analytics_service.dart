@@ -79,6 +79,21 @@ class AnalyticsService extends ChangeNotifier {
 
   /// Add a tracking event to the in-memory list
   void track(TrackingEvent event) {
+    // Determine page scope (public/authenticated) and attach contract metadata
+    try {
+      final scope = _determinePageScope(event.pageId);
+      event.data['pageScope'] = scope;
+
+      final ctEnum = _contractProvider?.contractSource;
+      if (ctEnum != null) {
+        event.data.putIfAbsent('contractType', () => ctEnum.toString());
+      }
+      event.data.putIfAbsent('contractVersion', () => _contractProvider?.contractVersion ?? 'unknown');
+      event.data.putIfAbsent('isPersonalized', () => _contractProvider?.isPersonalized ?? false);
+    } catch (_) {
+      // Safe fallthrough: do not block tracking on scope computation errors
+      event.data['pageScope'] ??= 'public';
+    }
     _applyLocalTagging(event);
     events.add(event);
     notifyListeners();
@@ -88,9 +103,10 @@ class AnalyticsService extends ChangeNotifier {
       final ct = _contractProvider?.contractSource?.toString().split('.').last ?? 'unknown';
       final cv = _contractProvider?.contractVersion ?? 'unknown';
       final ip = _contractProvider?.isPersonalized ?? false;
+      final scope = event.data['pageScope'];
       final userObj = _stateManager?.getGlobalState<Map<String, dynamic>>('user');
       final currentUserId = userObj?['id']?.toString();
-      print('📊 Tracked: $type (component=${event.componentId}, page=${event.pageId}, tag=$tag, contractType=$ct, version=$cv, personalized=$ip, user=$currentUserId)');
+      print('📊 Tracked: $type (component=${event.componentId}, page=${event.pageId}, scope=$scope, tag=$tag, contractType=$ct, version=$cv, personalized=$ip, user=$currentUserId)');
     }
   }
 
@@ -303,6 +319,8 @@ class AnalyticsService extends ChangeNotifier {
     out['contractType'] = e.data['contractType'] ?? 'unknown';
     out['contractVersion'] = e.data['contractVersion'] ?? 'unknown';
     out['isPersonalized'] = e.data['isPersonalized'] ?? false;
+    // Page scope (shared vs personalized)
+    out['pageScope'] = e.data['pageScope'] ?? _determinePageScope(e.pageId);
     // Optional tags
     if (e.data.containsKey('tag')) out['tag'] = e.data['tag'];
     if (e.data.containsKey('repeatCount')) out['repeatCount'] = e.data['repeatCount'];
@@ -312,6 +330,46 @@ class AnalyticsService extends ChangeNotifier {
       if (e.data.containsKey('error')) out['error'] = e.data['error'];
     }
     return out;
+  }
+
+  /// Determine if a page is public (shared) or authenticated (personalized)
+  String _determinePageScope(String? pageId) {
+    try {
+      if (pageId == null || pageId.isEmpty) return 'public';
+
+      // Simple hardcoded list for initial implementation; can be made dynamic later
+      const hardcodedAuthPages = {
+        'profile', 'settings', 'dashboard', 'account'
+      };
+      if (hardcodedAuthPages.contains(pageId)) return 'authenticated';
+
+      // Try to infer from contract routes' auth requirements
+      final contract = _contractProvider?.contract;
+      final pagesUi = (contract is Map<String, dynamic>) ? contract['pagesUI'] as Map<String, dynamic>? : null;
+      final routes = pagesUi != null ? pagesUi['routes'] as Map<String, dynamic>? : null;
+      if (routes != null) {
+        for (final entry in routes.entries) {
+          final value = entry.value;
+          if (value is Map<String, dynamic>) {
+            final rid = value['pageId']?.toString();
+            if (rid == pageId) {
+              final authVal = value['auth'];
+              if (authVal == true) return 'authenticated';
+              if (authVal is String) {
+                final v = authVal.toLowerCase();
+                if (v == 'required' || v == 'true' || v == 'auth' || v == 'authenticated') {
+                  return 'authenticated';
+                }
+              }
+              return 'public';
+            }
+          }
+        }
+      }
+    } catch (_) {
+      // Fallthrough to public
+    }
+    return 'public';
   }
 
   String _generateEventId() {

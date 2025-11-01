@@ -104,3 +104,11 @@ This document summarizes key implementation details, algorithms, and file refere
 - Visibility-aware rendering: `GraphEngine` only ticks visible components to reduce unnecessary rebuilds.
 - Template resolution: Actions can embed `${state.<key>}` in params; resolved at dispatch time.
 - Optimistic updates: Supported in API calls with rollback on failure for resilient UX.
+## Analytics & Contract Logging Updates (2025-11-01)
+
+- Analytics (`lib/analytics/services/analytics_service.dart`):
+  - Adds `pageScope` classification (`public` | `authenticated`) derived from contract routes or heuristics (login/signup flows).
+  - Enriches event payloads with `contractType`, `contractVersion`, and `isPersonalized` during `flush()`.
+- Contract Service (`lib/services/contract_service.dart`):
+  - Logs concise summaries on successful fetches (source, version, page/route counts).
+  - Detects merge metadata (`mergeMetadata`, `isPartial`, `mergedPages`) and prints counts; `verboseMergeLogging` shows page IDs in debug builds.

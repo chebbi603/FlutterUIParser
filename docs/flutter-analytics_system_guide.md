@@ -113,3 +113,33 @@ If no `backendUrl` is set, events remain in memory and are printed in debug buil
 
 ## Migration Notes
 Removed: `AnalyticsAppIntegration`, `TrackedComponentFactory`, session summaries, buffering middleware, connectivity/offline queue. Use JSON‑driven `trackedComponents` + `ComponentTracker` and `AnalyticsService.flush()` instead.
+## Page Scope Classification (added)
+- Field: `pageScope` indicates if the page is `public` or `authenticated`.
+- Computation:
+  - If the active contract defines `pagesUI.routes[<route>].auth`, then `true` → `authenticated`, `false` → `public`.
+  - If `EnhancedBottomNavigationConfig.authRequired` is set for the active tab, it overrides to `authenticated`.
+  - Fallback heuristics: known pages `login`, `signup`, `forgotPassword` are treated as `public`; unknown pages default to `authenticated`.
+- Wiring:
+  - Ensure `AnalyticsService.attachContractProvider()` is called so routes are available.
+  - Provide `pageId` when tracking navigation or component interactions; `EnhancedPageBuilder` does this automatically.
+- Backend:
+  - `pageScope` is included in the formatted payload during `flush()` alongside attribution metadata.
+
+Example event (enriched):
+```json
+{
+  "timestamp": 1681836102000,
+  "componentId": "login_button",
+  "eventType": "tap",
+  "pageId": "login",
+  "pageScope": "public",
+  "contractType": "canonical",
+  "contractVersion": "1.0.0",
+  "isPersonalized": false
+}
+```
+
+Implementation notes:
+- `AnalyticsService.track()` and `trackComponentInteraction()` compute `pageScope` from the attached contract provider and known page IDs.
+- `EnhancedPageBuilder` passes `pageId` to trackers; ensure page IDs match `pagesUI.pages` keys in the contract.
+- If `pageScope` cannot be inferred, it defaults to `authenticated` to avoid under‑scoping.

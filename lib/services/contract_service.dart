@@ -17,6 +17,7 @@ class ContractService {
   final String baseUrl;
   final http.Client _client;
   final Duration _timeout;
+  bool verboseMergeLogging = kDebugMode;
 
   ContractService({
     required this.baseUrl,
@@ -44,6 +45,8 @@ class ContractService {
         final map = _parseJsonToMap(response.body, source: 'primary response');
         _validateContractStructure(map);
         final version = _extractVersion(map);
+        // Debug summary for canonical contract (primary)
+        _logContractSummary('fetchCanonicalContract:primary', map, ContractSource.canonical);
         return ContractResult(
           contract: map,
           source: ContractSource.canonical,
@@ -76,6 +79,8 @@ class ContractService {
         final map = _parseJsonToMap(response.body, source: 'fallback response');
         _validateContractStructure(map);
         final version = _extractVersion(map);
+        // Debug summary for canonical contract (fallback)
+        _logContractSummary('fetchCanonicalContract:fallback', map, ContractSource.canonical);
         return ContractResult(
           contract: map,
           source: ContractSource.canonical,
@@ -153,6 +158,42 @@ class ContractService {
     return 'unknown';
   }
 
+  /// Log a concise summary of the contract payload for merge/debug analysis.
+  void _logContractSummary(String label, Map<String, dynamic> map, ContractSource source, {String? userId}) {
+    try {
+      final version = _extractVersion(map);
+      final pagesUi = map['pagesUI'] as Map<String, dynamic>? ?? const {};
+      final pages = pagesUi['pages'] as Map<String, dynamic>? ?? const {};
+      final routes = pagesUi['routes'] as Map<String, dynamic>? ?? const {};
+      final userSuffix = userId != null ? ', userId=$userId' : '';
+      _log('[$label] source=${source.name}, version=$version, pages=${pages.length}, routes=${routes.length}$userSuffix');
+
+      // Check for merge metadata hints
+      final mergeMeta = map['mergeMetadata'];
+      final isPartial = map['isPartial'];
+      final mergedPages = map['mergedPages'];
+      if (mergeMeta is Map<String, dynamic>) {
+        final mp = mergeMeta['mergedPages'];
+        int? mergedCount;
+        if (mp is List) mergedCount = mp.length;
+        if (mp is Map) mergedCount = mp.length;
+        _log('[$label] mergeMetadata: isPartial=${mergeMeta['isPartial']}, mergedPagesCount=${mergedCount ?? 'unknown'}');
+      } else if (mergedPages != null || isPartial != null) {
+        int? mergedCount;
+        if (mergedPages is List) mergedCount = mergedPages.length;
+        if (mergedPages is Map) mergedCount = mergedPages.length;
+        _log('[$label] mergedPagesCount=${mergedCount ?? 'unknown'}, isPartial=$isPartial');
+      }
+
+      if (verboseMergeLogging && pages.isNotEmpty) {
+        final pageIds = pages.keys.join(', ');
+        _log('[$label] page IDs: $pageIds');
+      }
+    } catch (e) {
+      _log('[$label] logging error: $e');
+    }
+  }
+
   /// Fetch a personalized user-specific contract using JWT authentication.
   ///
   /// Endpoint: `/users/{userId}/contract`
@@ -175,6 +216,8 @@ class ContractService {
         final map = _parseJsonToMap(response.body, source: 'user response');
         _validateContractStructure(map);
         final version = _extractVersion(map);
+        // Debug summary for personalized contract
+        _logContractSummary('fetchUserContract', map, ContractSource.personalized, userId: userId);
         return ContractResult(
           contract: map,
           source: ContractSource.personalized,

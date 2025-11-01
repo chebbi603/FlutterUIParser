@@ -119,3 +119,25 @@ ANALYTICS_BACKEND_URL=http://localhost:8081/events
 - 401 behavior: client halts flush and clears events that contain `userId`, preventing retry loops.
 - Empty URL after env resolution: Ensure `.env` defines `ANALYTICS_BACKEND_URL` with a full URL.
 - No button visible: The test button only appears in debug builds (`kDebugMode`).
+### Page Scope Field (new)
+- Client enriches events with `pageScope`:
+  - Values: `public` | `authenticated`
+  - Computed from contract routes (`auth`) or bottom navigation `authRequired`; defaults to `authenticated` when unknown.
+- Ingestion guidance:
+  - Segment KPIs and funnels by `pageScope` to separate pre‑auth vs post‑auth behavior.
+  - Treat `login`, `signup`, and password flows as `public` journeys; verify your contract routes reflect this via `auth` flags.
+
+Example (server‑received event):
+```json
+{
+  "timestamp": 1681836102000,
+  "componentId": "login_button",
+  "eventType": "tap",
+  "pageId": "login",
+  "pageScope": "public",
+  "contractType": "canonical",
+  "contractVersion": "1.0.0",
+  "isPersonalized": false,
+  "userId": null
+}
+```

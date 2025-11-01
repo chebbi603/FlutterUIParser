@@ -76,3 +76,20 @@ Future<void> loadContracts() async {
 - 404 on user contract triggers canonical fallback.
 - 401 throws `AuthenticationException` for auth flows.
 - Every network error path logs actionable context for debugging.
+## Detailed Merge Logging (added)
+- Summary logging:
+  - On successful canonical fetch (primary and fallback) and personalized fetch, the service prints a concise summary:
+    - `source` (`canonical`/`personalized`), `version`, counts of `pages` and `routes`, optional `userId`.
+  - If merge hints exist (`mergeMetadata`, `isPartial`, `mergedPages`), it logs merge status and a best‑effort `mergedPagesCount`.
+- Verbose mode:
+  - `verboseMergeLogging` (default `kDebugMode`) prints the list of page IDs to aid diff/debug.
+  - You can toggle at runtime: `service.verboseMergeLogging = true;`.
+- Sample logs:
+```
+[fetchCanonicalContract:primary] source=canonical, version=1.2.3, pages=18, routes=9
+[fetchCanonicalContract:primary] mergeMetadata: isPartial=false, mergedPagesCount=18
+[fetchUserContract] source=personalized, version=1.2.3-p1, pages=20, routes=9, userId=123
+[fetchUserContract] mergedPagesCount=2, isPartial=true
+[fetchUserContract] page IDs: home, catalog, cart, checkout, profile, login, signup, forgotPassword, ...
+```
+- Rationale: These logs make it straightforward to confirm successful merges, diagnose unexpected missing pages, and validate route auth coverage.

@@ -194,3 +194,13 @@ or
 - Dates in narrative docs use ISO 8601 (`YYYY-MM-DD`).
 - Analytics payload `timestamp` fields use milliseconds since epoch.
 - Terminology is consistent: `PageConfig`, `ComponentConfig`, `backendUrl`, `componentId`.
+## Update Addendum (2025-11-01)
+- Analytics enrichment: client includes `pageScope` (`public` | `authenticated`) alongside `contractType`, `contractVersion`, and `isPersonalized` to improve backend segmentation.
+- Contract fetch logging: service prints summaries for canonical/personalized contracts (version, pages/routes) and merge hints; optional verbose mode lists page IDs in debug.
+
+Example logs:
+```
+[fetchCanonicalContract:fallback] source=canonical, version=1.0.0, pages=12, routes=6
+[fetchUserContract] source=personalized, version=1.0.0-p1, pages=14, routes=6, userId=abc
+[fetchUserContract] mergedPagesCount=2, isPartial=true
+```
