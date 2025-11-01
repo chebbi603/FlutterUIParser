@@ -75,7 +75,7 @@ class ComponentBindingUtils {
   static String? resolveStateKey(EnhancedComponentConfig config) {
     if (config.binding != null) {
       final b = config.binding!;
-      if (b.startsWith('\${state.') && b.endsWith('}')) {
+      if (b.startsWith(r'${state.') && b.endsWith('}')) {
         return b.substring(8, b.length - 1);
       }
       return b;

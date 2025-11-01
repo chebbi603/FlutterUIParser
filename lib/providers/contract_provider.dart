@@ -1,11 +1,14 @@
 import 'package:flutter/foundation.dart';
 import '../services/contract_service.dart';
 import '../models/contract_result.dart';
+import '../services/auth_service.dart';
+import '../state/state_manager.dart';
 
 /// ContractProvider manages fetching and refreshing the canonical contract.
 /// It exposes loading and error states for UI feedback.
 class ContractProvider extends ChangeNotifier {
   final ContractService _service;
+  AuthService? _authService;
 
   ContractResult? _currentContract;
   String? _authUserId;
@@ -15,6 +18,10 @@ class ContractProvider extends ChangeNotifier {
   DateTime? _lastRefreshAt;
 
   ContractProvider({required ContractService service}) : _service = service;
+
+  void attachAuthService(AuthService authService) {
+    _authService = authService;
+  }
 
   // Read-only getters
   Map<String, dynamic>? get contract => _currentContract?.contract;
@@ -92,12 +99,31 @@ class ContractProvider extends ChangeNotifier {
       final result = await _service.fetchUserContract(userId: uid, jwtToken: token);
       _currentContract = result; // may be personalized or canonical (404 fallback handled by service)
     } on AuthenticationException catch (e) {
-      // Clear auth state on authentication failure
-      _currentContract = null; // signal offline/invalid state
-      _authUserId = null;
-      _jwtToken = null;
-      _error = 'Authentication error: ${e.message}';
+      // Attempt token refresh via AuthService; on success retry, else state is cleared
       debugPrint('[ContractProvider.loadUserContract] auth error: $e');
+      final refreshed = await (_authService?.tryRefresh() ?? Future.value(false));
+      if (refreshed) {
+        final newToken = EnhancedStateManager().getGlobalState<String>('authToken') ?? '';
+        if (newToken.isNotEmpty) {
+          try {
+            final retry = await _service.fetchUserContract(userId: uid, jwtToken: newToken);
+            _currentContract = retry;
+            _error = null;
+          } catch (err) {
+            _currentContract = null;
+            _error = 'Failed to load user contract after refresh: $err';
+          }
+        } else {
+          _currentContract = null;
+          _error = 'Authentication error: missing refreshed token';
+        }
+      } else {
+        // Clear tracked auth state in provider; AuthService.logout may also navigate
+        _currentContract = null; // signal offline/invalid state
+        _authUserId = null;
+        _jwtToken = null;
+        _error = 'Authentication error: ${e.message}';
+      }
     } catch (e) {
       // Preserve auth state on transient errors
       _currentContract = null;

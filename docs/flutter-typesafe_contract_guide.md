@@ -43,9 +43,24 @@ This guide explains how to author a robust, typesafe JSON contract that drives y
 
 ### `pagesUI`
 - `routes`: `{ "/": { pageId }, ... }` with optional `auth` and route params
-- `bottomNavigation`: `{ enabled, initialIndex?, items: [{ pageId, title, icon }] }`
-- `pages`: map of page → `Page`
-- Page: `{ id, title, layout: "scroll"|"column"|"row"|"center"|"grid"|"list"|"hero", navigationBar?: { title }, children: Component[] }`
+- `bottomNavigation`: `{ enabled, initialIndex?, items: [{ pageId|route, title|label, icon }] }`
+  - `pages`: map of page → `Page`
+  - Page: `{ id, title, layout: "scroll"|"column"|"row"|"center"|"grid"|"list"|"hero", navigationBar?: { title }, children: Component[] }`
+  - Bottom nav item resolution:
+    - Prefer `pageId` to resolve a tab’s page; if `route` is provided, it maps directly and is used by `NavigationBridge.switchTo(route)`.
+    - Use `label` as an alternative to `title` for the tab text.
+    - Example:
+    ```json
+    {
+      "bottomNavigation": {
+        "enabled": true,
+        "items": [
+          { "route": "/home", "label": "Home", "icon": "house" },
+          { "pageId": "courses", "title": "Courses", "icon": "doc_text" }
+        ]
+      }
+    }
+    ```
 
 ### `state`
 - `global`: key-value defaults; each field `{ type, default?, persistence? }`
@@ -91,7 +106,7 @@ This guide explains how to author a robust, typesafe JSON contract that drives y
 - `children`: for container/layout components
 - `binding`: path for data/state binding (e.g., `${state.user.name}`)
 - `permissions`: array of required permission keys
-- Events: `onTap`, `onChanged`, `onSubmit` each an `Action`
+- Events: `onTap`, `onChanged`, `onSubmit` each an `Action`; components also accept a generic `action` alias for `onTap`.
 
 ### Styling
 - `padding`: number or object with `{ all|horizontal|vertical|left|top|right|bottom }`

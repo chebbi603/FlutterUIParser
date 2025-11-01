@@ -223,12 +223,41 @@ class EnhancedStateManager extends ChangeNotifier {
   T? getState<T>(String path) {
     final parts = path.split('.');
 
+    if (parts.isEmpty) return null;
+
+    // Prefer global state lookup when the first segment matches a global key
+    if (_globalState.containsKey(parts[0])) {
+      final root = _globalState[parts[0]];
+      if (parts.length == 1) {
+        return root as T?;
+      }
+      // Deep lookup within nested map/object
+      final tail = parts.sublist(1);
+      final resolved = _resolveDeep(root, tail);
+      return resolved as T?;
+    }
+
+    // Fallback to page state when first segment matches a page id
+    if (_pageState.containsKey(parts[0])) {
+      if (parts.length == 1) {
+        // Return entire page state map
+        return _pageState[parts[0]] as T?;
+      }
+      final pageId = parts[0];
+      final key = parts[1];
+      final value = getPageState(pageId, key);
+      if (parts.length == 2) {
+        return value as T?;
+      }
+      // Deep lookup under page key if it is a map/object
+      final tail = parts.sublist(2);
+      final resolved = _resolveDeep(value, tail);
+      return resolved as T?;
+    }
+
+    // Single segment: plain global path
     if (parts.length == 1) {
-      // Global state
       return getGlobalState<T>(parts[0]);
-    } else if (parts.length == 2) {
-      // Page state
-      return getPageState<T>(parts[0], parts[1]);
     }
 
     return null;
@@ -245,6 +274,21 @@ class EnhancedStateManager extends ChangeNotifier {
       // Page state
       await setPageState(parts[0], parts[1], value);
     }
+  }
+
+  /// Resolve deep value from a root object using a tail path (map-only).
+  dynamic _resolveDeep(dynamic root, List<String> tail) {
+    if (root == null || tail.isEmpty) return root;
+    dynamic current = root;
+    for (final key in tail) {
+      if (current is Map<String, dynamic>) {
+        current = current[key];
+      } else {
+        // Non-map encountered; cannot traverse deeper
+        return null;
+      }
+    }
+    return current;
   }
 
   /// Get session state (memory only)

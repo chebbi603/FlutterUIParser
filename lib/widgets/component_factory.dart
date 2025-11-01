@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'dart:async';
 import '../models/config_models.dart';
 import '../services/api_service.dart';
@@ -8,12 +9,14 @@ import '../events/action_dispatcher.dart';
 import '../state/state_manager.dart';
 import '../permissions/permission_manager.dart';
 import '../engine/graph_engine.dart';
+// Removed diagnostic scanner import; factory should not emit dev-only overlays
 import 'components/switch_component.dart';
 import 'components/slider_component.dart';
 import 'components/text_field_component.dart';
 import 'components/button_component.dart';
 import 'components/icon_component.dart';
 import 'components/text_component.dart';
+import 'components/image_component.dart';
 
 /// Enhanced component factory with theming, validation, permissions, and state management
 class EnhancedComponentFactory {
@@ -62,6 +65,26 @@ class EnhancedComponentFactory {
     // Resolve theme tokens in style
     final resolvedConfig = _resolveThemeTokens(config);
 
+    // Diagnostics: component creation and binding presence
+    try {
+      final idInfo = resolvedConfig.id ?? '-';
+      debugPrint('[diag][component] Create type=${resolvedConfig.type} id=$idInfo');
+      final bindingFields = <String, String?>{
+        'text': resolvedConfig.text,
+        'binding': resolvedConfig.binding,
+        'style.color': resolvedConfig.style?.color,
+        'style.backgroundColor': resolvedConfig.style?.backgroundColor,
+        'style.foregroundColor': resolvedConfig.style?.foregroundColor,
+        'placeholder': resolvedConfig.placeholder,
+        'label': resolvedConfig.label,
+      };
+      bindingFields.forEach((k, v) {
+        if (v != null && v.contains(r'${')) {
+          debugPrint('[diag][binding] ${resolvedConfig.type} id=$idInfo field="$k" value="$v"');
+        }
+      });
+    } catch (_) {}
+
     switch (resolvedConfig.type) {
       case 'text':
         return _createText(resolvedConfig);
@@ -90,6 +113,14 @@ class EnhancedComponentFactory {
         return _createColumn(resolvedConfig);
       case 'center':
         return _createCenter(resolvedConfig);
+      case 'spacer':
+        return _createSpacer(resolvedConfig);
+      case 'constrained':
+        return _createConstrained(resolvedConfig);
+      case 'aligned':
+        return _createAligned(resolvedConfig);
+      case 'aspectRatio':
+        return _createAspectRatio(resolvedConfig);
       case 'hero':
         return _createHero(resolvedConfig);
       case 'form':
@@ -113,28 +144,54 @@ class EnhancedComponentFactory {
       case 'webview':
         return _createWebView(resolvedConfig);
       default:
-        return _createText(
-          EnhancedComponentConfig(
-            type: 'text',
-            text: 'Unknown component: ${resolvedConfig.type}',
-            style: StyleConfig(color: _currentTheme?['error']),
-          ),
-        );
+        // Contract-first: do not render unknown components
+        debugPrint('[factory] Unknown component type="${resolvedConfig.type}" id=${resolvedConfig.id ?? '-'}');
+        return const SizedBox.shrink();
     }
   }
 
   static EnhancedComponentConfig _resolveThemeTokens(
     EnhancedComponentConfig config,
   ) {
-    if (config.style == null || _currentTheme == null) return config;
+    // If no theme is available, return as-is
+    if (_currentTheme == null) return config;
 
-    final style = config.style!;
+    // Always work with a style instance (create empty if null)
+    final style = config.style ?? StyleConfig();
+    // Resolve typography token values first, then apply explicit overrides.
+    double? resolvedFontSize = style.fontSize;
+    String? resolvedFontWeight = style.fontWeight;
+    if (style.use != null && _contract != null) {
+      final token = style.use!;
+      final typography = _contract!.themingAccessibility.typography[token];
+      if (typography != null) {
+        resolvedFontSize = resolvedFontSize ?? typography.fontSize;
+        resolvedFontWeight = resolvedFontWeight ?? typography.fontWeight;
+      } else {
+        debugPrint('[style] Unknown typography token "$token"');
+      }
+    }
+    // Apply component-specific defaults using theme tokens
+    String? defaultBackground = style.backgroundColor;
+    String? defaultForeground = style.foregroundColor;
+    String? defaultColor = style.color;
+
+    // Default filled button background to theme.primary when not provided
+    if (config.type == 'button' && defaultBackground == null) {
+      defaultBackground = r'${theme.primary}';
+    }
+
+    // Default text button color to theme.primary when not provided
+    if (config.type == 'textButton' && defaultColor == null) {
+      defaultColor = r'${theme.primary}';
+    }
+
     final resolvedStyle = StyleConfig(
-      fontSize: style.fontSize,
-      fontWeight: style.fontWeight,
-      color: _resolveToken(style.color),
-      backgroundColor: _resolveToken(style.backgroundColor),
-      foregroundColor: _resolveToken(style.foregroundColor),
+      fontSize: resolvedFontSize,
+      fontWeight: resolvedFontWeight,
+      color: _resolveToken(defaultColor),
+      backgroundColor: _resolveToken(defaultBackground),
+      foregroundColor: _resolveToken(defaultForeground),
       textAlign: style.textAlign,
       width: style.width,
       height: style.height,
@@ -143,6 +200,7 @@ class EnhancedComponentFactory {
       elevation: style.elevation,
       padding: style.padding,
       margin: style.margin,
+      use: style.use,
     );
 
     return EnhancedComponentConfig(
@@ -184,12 +242,24 @@ class EnhancedComponentFactory {
   static String? _resolveToken(String? value) {
     if (value == null || _currentTheme == null) return value;
 
-    if (value.startsWith('\${theme.') && value.endsWith('}')) {
+    if (value.startsWith(r'${theme.') && value.endsWith('}')) {
       final tokenName = value.substring(8, value.length - 1);
-      return _currentTheme![tokenName] ?? value;
+      final resolved = _currentTheme![tokenName];
+      if (resolved == null) {
+        debugPrint('[diag][theme] MISSING token "$tokenName"; returning null to allow fallbacks');
+        return null;
+      } else {
+        debugPrint('[diag][theme] Resolved token "$tokenName" => "$resolved"');
+        return resolved;
+      }
     }
 
     return value;
+  }
+
+  // Public wrapper to resolve theme tokens for external callers (e.g., page builder)
+  static String? resolveToken(String? value) {
+    return _resolveToken(value);
   }
 
   static Widget _createText(EnhancedComponentConfig config) {
@@ -205,27 +275,25 @@ class EnhancedComponentFactory {
   }
 
   static Widget _createTextButton(EnhancedComponentConfig config) {
+    if (config.text == null || (config.text?.isEmpty ?? true)) {
+      return const SizedBox.shrink();
+    }
     return Builder(
-      builder:
-          (context) => CupertinoButton(
-            onPressed:
-                config.onTap != null
-                    ? () =>
-                        EnhancedActionDispatcher.execute(context, config.onTap!)
-                    : null,
-            padding: config.style?.padding?.toEdgeInsets() ?? EdgeInsets.zero,
-            child: Text(
-              config.text ?? 'Text Button',
-              style: TextStyle(
-                color:
-                    _parseColor(config.style?.color) ??
-                    _parseColor(_currentTheme?['primary']),
-                fontSize: config.style?.fontSize ?? 16.0,
-                fontWeight: _parseFontWeight(config.style?.fontWeight),
-              ),
-              textAlign: _parseTextAlign(config.style?.textAlign),
-            ),
+      builder: (context) => CupertinoButton(
+        onPressed: config.onTap != null
+            ? () => EnhancedActionDispatcher.execute(context, config.onTap!)
+            : null,
+        padding: config.style?.padding?.toEdgeInsets() ?? EdgeInsets.zero,
+        child: Text(
+          config.text!,
+          style: TextStyle(
+            color: _parseColor(config.style?.color) ?? _parseColor(_currentTheme?['primary']),
+            fontSize: config.style?.fontSize ?? 16.0,
+            fontWeight: _parseFontWeight(config.style?.fontWeight),
           ),
+          textAlign: _parseTextAlign(config.style?.textAlign),
+        ),
+      ),
     );
   }
 
@@ -245,14 +313,17 @@ class EnhancedComponentFactory {
       final hash = _hashChipConfig(config);
       final cached = _componentCache[hash];
       if (cached != null) return cached;
+      if (config.text == null || (config.text?.isEmpty ?? true)) {
+        return const SizedBox.shrink();
+      }
       final chip = Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: config.style?.padding?.toEdgeInsets() ?? EdgeInsets.zero,
         decoration: BoxDecoration(
           color: _parseColor(config.style?.backgroundColor),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Text(
-          config.text ?? 'Chip',
+          config.text!,
           style: TextStyle(
             color: _parseColor(config.style?.foregroundColor),
             fontSize: 12,
@@ -262,15 +333,17 @@ class EnhancedComponentFactory {
       _componentCache[hash] = chip;
       return chip;
     }
-
+    if (config.text == null || (config.text?.isEmpty ?? true)) {
+      return const SizedBox.shrink();
+    }
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: config.style?.padding?.toEdgeInsets() ?? EdgeInsets.zero,
       decoration: BoxDecoration(
         color: _parseColor(config.style?.backgroundColor),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Text(
-        config.text ?? 'Chip',
+        config.text!,
         style: TextStyle(
           color: _parseColor(config.style?.foregroundColor),
           fontSize: 12,
@@ -331,7 +404,11 @@ class EnhancedComponentFactory {
 
   // Parsing utilities
   static Color? _parseColor(String? colorString) {
-    return ParsingUtils.parseColor(colorString);
+    // Do not default to a color when unspecified; allow parent defaults.
+    if (colorString == null || colorString.isEmpty) return null;
+    // Resolve any theme tokens before parsing.
+    final resolved = resolveToken(colorString);
+    return ParsingUtils.parseColor(resolved);
   }
 
   static FontWeight _parseFontWeight(String? weight) {
@@ -392,6 +469,45 @@ class EnhancedComponentFactory {
     }
   }
 
+  static Alignment _parseAlignment(String? alignment) {
+    switch (alignment) {
+      case 'center':
+        return Alignment.center;
+      case 'start':
+        return Alignment.topLeft;
+      case 'end':
+        return Alignment.bottomRight;
+      case 'topCenter':
+        return Alignment.topCenter;
+      case 'bottomCenter':
+        return Alignment.bottomCenter;
+      default:
+        return Alignment.centerLeft;
+    }
+  }
+
+  static Clip? _parseClipBehavior(String? clip) {
+    switch (clip) {
+      case 'antiAlias':
+      case 'antiAliasWithSaveLayer':
+        return Clip.antiAlias;
+      case 'hardEdge':
+        return Clip.hardEdge;
+      case 'none':
+        return Clip.none;
+      default:
+        return null;
+    }
+  }
+
+  static Gradient? _buildGradient(GradientConfig? gradient) {
+    if (gradient == null) return null;
+    final start = _parseColor(gradient.startColor);
+    final end = _parseColor(gradient.endColor);
+    if (start == null || end == null) return null;
+    return LinearGradient(colors: [start, end]);
+  }
+
   static int _hashChipConfig(EnhancedComponentConfig config) {
     return Object.hash(
       'chip',
@@ -404,20 +520,7 @@ class EnhancedComponentFactory {
 
   // Builder methods restored inside EnhancedComponentFactory
   static Widget _createImage(EnhancedComponentConfig config) {
-    final src =
-        config.binding != null && config.boundData != null
-            ? config.boundData![config.binding!]?.toString() ?? ''
-            : (config.src ?? config.text ?? '');
-    if (config.src == null && config.text != null) {
-      // Deprecation warning for image.text
-      debugPrint('[image] "text" is deprecated; use "src" instead.');
-    }
-    return NetworkOrAssetImage(
-      src: src,
-      width: config.style?.width,
-      height: config.style?.height,
-      fit: BoxFit.cover,
-    );
+    return ImageComponent.build(config);
   }
 
   static Widget _createCard(EnhancedComponentConfig config) {
@@ -430,30 +533,70 @@ class EnhancedComponentFactory {
             .toList() ??
         [];
 
-    return Container(
-      padding:
-          config.style?.padding?.toEdgeInsets() ?? const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color:
-            _parseColor(config.style?.backgroundColor) ??
-            _parseColor(_currentTheme?['surface']),
-        borderRadius: BorderRadius.circular(config.style?.borderRadius ?? 8.0),
-        boxShadow:
-            config.style?.elevation != null && config.style!.elevation! > 0
-                ? [
-                  BoxShadow(
-                    color: CupertinoColors.black.withValues(alpha: 0.1),
-                    blurRadius: config.style!.elevation!,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-                : null,
-      ),
-      child: Column(
+    return Builder(builder: (context) {
+      final variant = (config.variant ?? 'filled').toLowerCase();
+      final borderRadius = config.style?.borderRadius ?? 8.0;
+      final padding = config.style?.padding?.toEdgeInsets() ?? EdgeInsets.zero;
+      final baseColor =
+          _parseColor(config.style?.backgroundColor) ??
+          _parseColor(_currentTheme?['surface']) ?? CupertinoColors.systemGrey6;
+      final gradient = _buildGradient(config.style?.gradient);
+
+      final content = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: children,
-      ),
-    );
+      );
+
+      if (variant == 'outlined') {
+        return Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: gradient == null ? baseColor : null,
+            gradient: gradient,
+            borderRadius: BorderRadius.circular(borderRadius),
+            border: Border.all(
+              color:
+                  _parseColor(config.style?.borderColor) ??
+                  _parseColor(_currentTheme?['outline']) ??
+                  CupertinoColors.separator,
+              width: config.style?.borderWidth ?? 1,
+            ),
+          ),
+          child: content,
+        );
+      }
+
+      final elevation = config.style?.elevation ?? (variant == 'elevated' ? 4 : 0).toDouble();
+      final clip = _parseClipBehavior(config.clipBehavior) ?? Clip.none;
+      Widget inner = Container(
+        decoration: BoxDecoration(
+          color: gradient == null ? baseColor : null,
+          gradient: gradient,
+          borderRadius: BorderRadius.circular(borderRadius),
+        ),
+        padding: padding,
+        child: content,
+      );
+
+      Widget material = Material(
+        color: gradient == null ? baseColor : Colors.transparent,
+        elevation: elevation,
+        borderRadius: BorderRadius.circular(borderRadius),
+        clipBehavior: clip,
+        child: inner,
+      );
+
+      if (config.onTap != null) {
+        material = InkWell(
+          onTap: () {
+            EnhancedActionDispatcher.execute(context, config.onTap!, {});
+          },
+          child: material,
+        );
+      }
+
+      return material;
+    });
   }
 
   static Widget _createList(EnhancedComponentConfig config) {
@@ -498,6 +641,98 @@ class EnhancedComponentFactory {
     );
   }
 
+  static Widget _createSpacer(EnhancedComponentConfig config) {
+    final flex = config.flex ?? 0;
+    if (flex > 0) {
+      return Spacer(flex: flex);
+    }
+    double size = 0;
+    switch (config.sizeToken) {
+      case 'small':
+        size = 8;
+        break;
+      case 'medium':
+        size = 16;
+        break;
+      case 'large':
+        size = 24;
+        break;
+      default:
+        size = 0;
+    }
+    final width = config.style?.width;
+    final height = config.style?.height ?? (size > 0 ? size : null);
+    if (width != null || height != null) {
+      return SizedBox(width: width, height: height);
+    }
+    if (size > 0) {
+      return SizedBox(height: size);
+    }
+    return const SizedBox.shrink();
+  }
+
+  static Widget _createConstrained(EnhancedComponentConfig config) {
+    final children =
+        config.children?.map((child) => createComponent(child)).toList() ?? [];
+    final child = children.length == 1
+        ? children.first
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: children,
+          );
+
+    final constraints = BoxConstraints(
+      minWidth: config.minWidth ?? 0,
+      maxWidth: config.maxWidth ?? double.infinity,
+      minHeight: config.minHeight ?? 0,
+      maxHeight: config.maxHeight ?? double.infinity,
+    );
+
+    Widget content = ConstrainedBox(constraints: constraints, child: child);
+    if (config.alignment != null) {
+      content = Align(
+        alignment: _parseAlignment(config.alignment),
+        child: content,
+      );
+    }
+
+    return Container(
+      padding: config.style?.padding?.toEdgeInsets(),
+      margin: config.style?.margin?.toEdgeInsets(),
+      color: _parseColor(config.style?.backgroundColor),
+      child: content,
+    );
+  }
+
+  static Widget _createAligned(EnhancedComponentConfig config) {
+    final children =
+        config.children?.map((child) => createComponent(child)).toList() ?? [];
+    final content = Row(
+      mainAxisAlignment: _parseMainAxisAlignment(config.mainAxisAlignment),
+      crossAxisAlignment: _parseCrossAxisAlignment(config.crossAxisAlignment),
+      children: _applySpacing(children, Axis.horizontal, config.spacing ?? 0),
+    );
+    return Container(
+      padding: config.style?.padding?.toEdgeInsets(),
+      margin: config.style?.margin?.toEdgeInsets(),
+      color: _parseColor(config.style?.backgroundColor),
+      child: content,
+    );
+  }
+
+  static Widget _createAspectRatio(EnhancedComponentConfig config) {
+    final child = config.children?.isNotEmpty == true
+        ? createComponent(config.children!.first)
+        : const SizedBox.shrink();
+    final ratio = config.aspectRatio ?? 1.0;
+    Widget content = AspectRatio(aspectRatio: ratio, child: child);
+    final clip = _parseClipBehavior(config.clipBehavior);
+    if (clip != null && clip != Clip.none) {
+      content = ClipRect(clipBehavior: clip, child: content);
+    }
+    return content;
+  }
+
   static Widget _createCenter(EnhancedComponentConfig config) {
     final child =
         config.children?.isNotEmpty == true
@@ -512,8 +747,7 @@ class EnhancedComponentFactory {
         config.children?.map((child) => createComponent(child)).toList() ?? [];
 
     return Container(
-      padding:
-          config.style?.padding?.toEdgeInsets() ?? const EdgeInsets.all(24),
+      padding: config.style?.padding?.toEdgeInsets() ?? EdgeInsets.zero,
       decoration: BoxDecoration(
         color: _parseColor(config.style?.backgroundColor),
         borderRadius: BorderRadius.circular(config.style?.borderRadius ?? 0),
@@ -535,7 +769,7 @@ class EnhancedComponentFactory {
         final String debounceKey =
             config.id ?? 'searchBar_${config.placeholder ?? ''}';
         return CupertinoSearchTextField(
-          placeholder: config.placeholder ?? 'Search...',
+          placeholder: config.placeholder ?? '',
           onChanged: (value) {
             if (config.onChanged != null) {
               final debounceMs = config.onChanged!.debounceMs ?? 0;
@@ -616,7 +850,26 @@ class _EnhancedListWidgetState extends State<EnhancedListWidget> {
             widget.componentId ??
             'list_${widget.config.dataSource?.service}_${widget.config.dataSource?.endpoint}';
         GraphEngine().setComponentVisible(id, true);
-        _loadPage(reset: true);
+        final ds = widget.config.dataSource;
+        final isStatic = ds?.type == 'static' || (ds?.items != null);
+        if (isStatic) {
+          // Static items: assign and skip API loading
+          final staticItems = ds?.items ?? const [];
+          setState(() {
+            items = List<dynamic>.from(staticItems);
+            loading = false;
+            error = false;
+            _hasMore = false;
+          });
+          GraphEngine().notifyDataSourceChange(id);
+        } else {
+          // Initialize pagination footer visibility based on config
+          final paginationEnabled = widget.config.dataSource?.pagination?.enabled == true;
+          setState(() {
+            _hasMore = paginationEnabled;
+          });
+          _loadPage(reset: true);
+        }
       }
     });
   }
@@ -642,7 +895,8 @@ class _EnhancedListWidgetState extends State<EnhancedListWidget> {
     try {
       final dataSource = widget.config.dataSource!;
       final Map<String, dynamic> params = {...?dataSource.params};
-      if (dataSource.pagination?.enabled == true) {
+      final paginationEnabled = dataSource.pagination?.enabled == true;
+      if (paginationEnabled) {
         params['page'] = _currentPage;
       }
 
@@ -663,7 +917,7 @@ class _EnhancedListWidgetState extends State<EnhancedListWidget> {
           items = [...items, ...response.data];
           _appendLoading = false;
         }
-        _hasMore = response.hasMore;
+        _hasMore = paginationEnabled ? response.hasMore : false;
         if (_hasMore && (response.data.isNotEmpty)) {
           _currentPage += 1;
         }

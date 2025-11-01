@@ -81,13 +81,14 @@ class TrackingEvent {
     this.componentId,
     this.componentType,
     this.pageId,
-    this.data = const {},
-    this.context = const {},
+    Map<String, dynamic>? data,
+    Map<String, dynamic>? context,
     this.userId,
     this.duration,
     this.errorMessage,
     this.previousEventId,
-  });
+  })  : data = data ?? <String, dynamic>{},
+        context = context ?? <String, dynamic>{};
 
   /// Create event from JSON
   factory TrackingEvent.fromJson(Map<String, dynamic> json) {

@@ -3,6 +3,8 @@ import 'api_service.dart';
 import 'contract_loader.dart';
 import '../providers/contract_provider.dart';
 import '../navigation/navigation_bridge.dart';
+import '../analytics/services/analytics_service.dart';
+import '../analytics/models/tracking_event.dart';
 
 class AuthService {
   final EnhancedStateManager _stateManager;
@@ -38,10 +40,14 @@ class AuthService {
     // Optional: store minimal user info if present
     final userId = response['_id']?.toString();
     final role = response['role']?.toString();
+    final username = response['username']?.toString();
+    final name = response['name']?.toString();
     if (userId != null) {
       await _stateManager.setGlobalState('user', {
         'id': userId,
         if (role != null) 'role': role,
+        if (username != null) 'username': username,
+        if (name != null) 'name': name,
       });
     }
 
@@ -53,6 +59,11 @@ class AuthService {
         // Do not block login completion on contract errors
       }
     }
+    // Analytics: log authentication success
+    AnalyticsService().logAuthEvent('user_authenticated', {
+      if (userId != null) 'userId': userId,
+      'loginMethod': 'email',
+    });
     return true;
   }
 
@@ -61,6 +72,10 @@ class AuthService {
     if (refreshToken == null || refreshToken.isEmpty) {
       return false;
     }
+    final analytics = AnalyticsService();
+    analytics.logAuthEvent('token_refresh_attempt', {
+      'hasRefreshToken': true,
+    });
     try {
       final res = await _apiService.call(
         service: 'auth',
@@ -75,9 +90,14 @@ class AuthService {
         _apiService.setAuthToken(newAccess);
         await _stateManager.setGlobalState('authToken', newAccess);
         await _stateManager.setGlobalState('refreshToken', newRefresh);
+        analytics.logAuthEvent('token_refresh_success', {});
         return true;
       }
-    } catch (_) {}
+    } catch (e) {
+      analytics.logAuthEvent('token_refresh_failed', {
+        'reason': e.toString(),
+      });
+    }
     await logout();
     return false;
   }
@@ -107,6 +127,14 @@ class AuthService {
     await _stateManager.setGlobalState('user', null);
     // Clear locally cached contract on logout
     await ContractLoader.clearCache();
+    // Clear all persisted state including page scope
+    await _stateManager.clearAll();
+
+    // Log analytics logout
+    final analytics = AnalyticsService();
+    analytics.logAuthEvent('logout', {
+      'timestamp': DateTime.now().toIso8601String(),
+    });
 
     // Optional navigation to login route via tab bridge mapping
     NavigationBridge.switchTo('/login');

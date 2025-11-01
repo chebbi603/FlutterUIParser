@@ -1,9 +1,11 @@
 import 'package:flutter/cupertino.dart';
+import '../utils/parsing_utils.dart';
 import '../models/config_models.dart';
 import 'component_factory.dart';
 import '../analytics/services/analytics_service.dart';
 import '../analytics/models/tracking_event.dart';
 import '../analytics/widgets/component_tracker.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 
 /// Enhanced page builder with advanced layout and navigation support
 class EnhancedPageBuilder extends StatefulWidget {
@@ -34,6 +36,11 @@ class _EnhancedPageBuilderState extends State<EnhancedPageBuilder> {
   }
 
   void _trackPageEntry() {
+    if (kDebugMode) {
+      final bg = widget.config.style?.backgroundColor;
+      final compCount = widget.config.children.length;
+      debugPrint("[diag][page] enter id=${widget.config.id} layout=${widget.config.layout} components=$compCount bg=${bg ?? '-'}");
+    }
     _analytics.trackPageNavigation(
       pageId: widget.config.id,
       eventType: TrackingEventType.pageEnter,
@@ -50,6 +57,16 @@ class _EnhancedPageBuilderState extends State<EnhancedPageBuilder> {
   /// Create component and wrap with ComponentTracker when ID is tracked
   Widget _createTrackedComponent(EnhancedComponentConfig config) {
     final child = EnhancedComponentFactory.createComponent(config);
+
+    if (kDebugMode) {
+      final hasBg = config.style?.backgroundColor != null;
+      final hasBinding = (config.text?.contains(r'${') ?? false) ||
+          (config.binding?.contains(r'${') ?? false) ||
+          (config.style?.color?.contains(r'${') ?? false) ||
+          (config.style?.backgroundColor?.contains(r'${') ?? false) ||
+          (config.style?.foregroundColor?.contains(r'${') ?? false);
+      debugPrint("[diag][component] page=${widget.config.id} type=${config.type} id=${config.id ?? '-'} bg=${hasBg ? 'yes' : 'no'} binding=${hasBinding ? 'yes' : 'no'}");
+    }
 
     final id = config.id;
     if (id != null && widget.trackedIds.contains(id)) {
@@ -115,6 +132,10 @@ class _EnhancedPageBuilderState extends State<EnhancedPageBuilder> {
             .map((child) => _createTrackedComponent(child))
             .toList();
 
+    if (kDebugMode && children.isEmpty) {
+      debugPrint('[diag][page] WARN empty body pageId=${widget.config.id}');
+    }
+
     switch (widget.config.layout.toLowerCase()) {
       case 'scroll':
         return _buildScrollLayout(children);
@@ -128,7 +149,7 @@ class _EnhancedPageBuilderState extends State<EnhancedPageBuilder> {
 
   Widget _buildScrollLayout(List<Widget> children) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.zero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: children,
@@ -139,7 +160,7 @@ class _EnhancedPageBuilderState extends State<EnhancedPageBuilder> {
   Widget _buildCenterLayout(List<Widget> children) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.zero,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -151,7 +172,7 @@ class _EnhancedPageBuilderState extends State<EnhancedPageBuilder> {
 
   Widget _buildColumnLayout(List<Widget> children) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.zero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: children,
@@ -160,17 +181,15 @@ class _EnhancedPageBuilderState extends State<EnhancedPageBuilder> {
   }
 
   Color? _parseColor(String? colorString) {
-    if (colorString == null) return null;
+    if (colorString == null || colorString.isEmpty) return null;
 
-    if (colorString.startsWith('#')) {
-      final hex = colorString.substring(1);
-      if (hex.length == 6) {
-        return Color(int.parse('FF$hex', radix: 16));
-      } else if (hex.length == 8) {
-        return Color(int.parse(hex, radix: 16));
-      }
+    if (kDebugMode && colorString.contains(r'${')) {
+      debugPrint('[diag][page] background binding detected value="$colorString"');
     }
 
-    return null;
+    // Resolve theme tokens via component factory, then parse using ParsingUtils
+    final resolved = EnhancedComponentFactory.resolveToken(colorString);
+    if (resolved == null || resolved.isEmpty) return null;
+    return ParsingUtils.parseColor(resolved);
   }
 }

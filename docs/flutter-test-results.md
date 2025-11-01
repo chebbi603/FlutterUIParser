@@ -1,5 +1,62 @@
 Project: demo_json_parser (Flutter)
 # Test Results — 2025-11-01
+Latest run: see `docs/history/flutter-test-results-run23.md` for details.
+
+## Summary (Run 17)
+- Command: `flutter test`
+- Result: Some tests failed
+- Total: 31 tests
+- Duration: ~3s
+
+## Context
+- Implemented token-aware page background parsing in `enhanced_page_builder.dart` using factory resolver and `ParsingUtils.parseColor`.
+- Disabled pagination footer for static lists by honoring `dataSource.pagination.enabled` in `EnhancedListWidget`.
+- These changes target UI rendering only; provider/service logic is untouched.
+
+## Notable Output (truncated)
+```
+
+## Summary (Run 19)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 33 tests
+- Duration: ~2s
+
+## Context
+- Implemented service name aliasing in `CanonicalContract.fromJson` to expose lowercase aliases for keys ending with `Service` or `Api` without overriding explicit mappings.
+- Added unit tests validating alias creation (`AuthService` -> `auth`) and non-override behavior.
+
+## Notable Output (truncated)
+```
+00:02 +33: All tests passed!
+```
+00:03 +30 -1: Some tests failed.
+Failing: /test/providers/contract_provider_test.dart: ContractProvider refreshContract routes to personalized when auth state present
+```
+
+## Summary (Run 18)
+- Command: `flutter test -r expanded`
+- Result: Some tests failed
+- Total: 31 tests
+- Duration: ~1–2s
+
+## Notable Output (truncated)
+```
+00:01 +29 -1: /test/providers/contract_provider_test.dart: ContractProvider refreshContract routes to personalized when auth state present
+⚠️ No backendUrl configured; keeping 1 events in memory
+00:01 +30 -1: Some tests failed.
+```
+
+## Summary (Run 15)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 31 tests
+- Duration: ~3s
+
+## Notable Output (truncated)
+```
+00:03 +31: All tests passed!
+```
 
 ## Summary (Run 2)
 - Command: `flutter test`
@@ -25,6 +82,28 @@ Project: demo_json_parser (Flutter)
 ```
 00:01 +31: All tests passed!
 ```
+
+## Summary (Run 16)
+- Command: `flutter test -r expanded`
+- Result: Some tests failed
+- Total: 31 tests
+- Duration: ~1–3s
+
+## Context
+- Introduced UI Diagnostic Scanner and debug-only logging in `component_factory.dart` and `enhanced_page_builder.dart`.
+- Invoked the scanner in `app.dart` after contract application (debug-only).
+- These changes do not affect release behavior; diagnostics are printed only in debug mode.
+
+## Notable Output (truncated)
+```
+📊 Tracked: input (component=field1, page=null, scope=public, tag=rapid_repeat, contractType=unknown, version=unknown, personalized=false, user=null)
+00:01 +30 -1: Some tests failed.
+Failing: /test/providers/contract_provider_test.dart: ContractProvider refreshContract routes to personalized when auth state present
+```
+
+## Notes
+- The failing test appears unrelated to the diagnostic scanner changes and concerns routing behavior under authenticated refresh.
+- Follow-up action: investigate `ContractProvider.refreshContract` routing logic and auth-linked switching when backend responses are mocked.
 
 ## Summary (Run 8)
 - Command: `flutter test`
@@ -220,4 +299,108 @@ Project: demo_json_parser (Flutter)
 📊 Tracked: tap (component=btn1, page=page1, tag=null, contractType=unknown, version=unknown, personalized=false, user=null)
 📊 Tracked: pageExit (component=null, page=page1, tag=null, contractType=unknown, version=unknown, personalized=false, user=null)
 00:00 +17: All tests passed!
+```
+
+## Summary (Run 15)
+- Command: `flutter test --reporter expanded`
+- Result: All tests passed
+- Total: 31 tests
+- Duration: ~1s
+
+## Context
+- Frontend base URL resolution updated in `lib/main.dart` to prefer `.env` variables (`API_BASE_URL`/`API_URL`) before compile-time flags.
+- Ensures the app reads contracts from the configured backend without requiring rebuilds when changing `.env`.
+- No behavioral changes to provider/service logic; validation and debounce remained intact.
+
+## Notable Output (truncated)
+```
+00:01 +31: All tests passed!
+```
+
+## Summary (Run 16)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 31 tests
+- Duration: ~3s
+
+## Context
+- Implemented contract-driven Cupertino theme in `lib/app.dart` using `themingAccessibility.tokens` and `typography`.
+- Added default global `theme` in canonical contract to ensure token resolution selects `light` or `dark` predictably.
+- Verified token parsing via `_parseColor` fallback and typography font weight mapping.
+
+## Summary (Run 17)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 31 tests
+- Duration: ~3s
+
+## Context
+- Enhanced `EnhancedComponentFactory._resolveThemeTokens` to provide theme defaults:
+  - `button.style.backgroundColor` defaults to `${theme.primary}` when omitted
+  - `textButton.style.color` defaults to `${theme.primary}` when omitted
+- Updated `docs/flutter-components_reference.md` to document these defaults.
+- Confirmed no regressions in analytics and page builder tests.
+
+## Notable Output (truncated)
+```
+00:03 +31: All tests passed!
+```
+## Summary (Run 16)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 31 tests
+- Duration: ~3s
+
+## Context
+- Parser now accepts style tokens in `StyleConfig.fromJson` (string) and stores them in `use`.
+- Factory merges typography presets from contract (`themingAccessibility.typography`) with explicit overrides.
+- Fixes crash when contracts provide `"style": "largeTitle"` or similar typography names.
+ 
+## Summary (Run 17)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 31 tests
+- Duration: ~3s
+
+## Context
+- Bottom navigation items now support `route`/`label` in addition to `pageId`/`title`; tabs resolve pages via `routes` when `pageId` is omitted.
+- Components accept a generic `action` field, mapped to `onTap` for interactive widgets (buttons, text, icons), aligning with the canonical contract.
+- `NavigationBridge.routeToIndex` adds route indices directly when items specify `route`, improving tab switching.
+
+## Notable Output (truncated)
+```
+00:03 +31: All tests passed!
+```
+
+## Notable Output (truncated)
+```
+00:03 +31: All tests passed!
+```
+## Test Run: Scanner fix and binding checks
+- Command: `flutter test -r expanded`
+- Result: All tests passed
+- Total: 31 tests
+- Duration: ~1s
+- Notable logs:
+  - `[diag][page] enter id=page1 layout=column components=2 bg=-`
+  - `📊 Tracked: pageEnter` and `pageExit` events emitted
+  - Analytics flush behavior correctly retains events when `backendUrl` missing
+  - ContractProvider routing tests passed with auth state present
+## Summary (Run 21)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 33 tests
+- Duration: ~3s
+
+## Context
+- Added deep state path resolution in `EnhancedStateManager.getState` to support `${state.user.username}`.
+- Updated `TextComponent` to resolve `${state.*}` and `${item.*}` templates and subscribe to root state keys for rebuilds.
+- Implemented static list support via `EnhancedDataSourceConfig.type='static'` and `items`, and updated `EnhancedListWidget` to render static items.
+
+## Notable Output (truncated)
+```
+00:02 +29: /test/widgets/enhanced_page_builder_test.dart: EnhancedPageBuilder wraps tracked components and emits tap
+[diag][component] Create type=textButton id=btn1
+[diag][component] Create type=text id=txt1
+00:03 +33: All tests passed!
 ```

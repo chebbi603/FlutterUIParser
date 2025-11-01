@@ -58,7 +58,7 @@ This document describes how the analytics backend URL is configured from the can
 ```
 
 ### Environment Variable Placeholders
-- For local builds, `assets/contracts/canonical.json` may define placeholders, e.g.:
+- The canonical contract delivered by the backend may define placeholders, e.g.:
 ```
 "backendUrl": "${ANALYTICS_BACKEND_URL}",
 "wsUrl": "${WS_URL}"

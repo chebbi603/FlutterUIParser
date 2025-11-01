@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:demo_json_parser/models/contract_result.dart';
+import 'package:demo_json_parser/services/contract_validator.dart';
 
 /// ContractService handles fetching the canonical contract JSON from the backend
 /// with a robust fallback strategy and clear error logging.
@@ -44,6 +45,8 @@ class ContractService {
         _log('Primary endpoint succeeded (200)');
         final map = _parseJsonToMap(response.body, source: 'primary response');
         _validateContractStructure(map);
+        // Run non-fatal validator to surface warnings during development
+        ContractValidator().validate(map);
         final version = _extractVersion(map);
         // Debug summary for canonical contract (primary)
         _logContractSummary('fetchCanonicalContract:primary', map, ContractSource.canonical);
@@ -78,6 +81,8 @@ class ContractService {
         _log('Fallback endpoint succeeded (200)');
         final map = _parseJsonToMap(response.body, source: 'fallback response');
         _validateContractStructure(map);
+        // Run non-fatal validator to surface warnings during development
+        ContractValidator().validate(map);
         final version = _extractVersion(map);
         // Debug summary for canonical contract (fallback)
         _logContractSummary('fetchCanonicalContract:fallback', map, ContractSource.canonical);
@@ -215,6 +220,8 @@ class ContractService {
         _log('User contract succeeded (200)');
         final map = _parseJsonToMap(response.body, source: 'user response');
         _validateContractStructure(map);
+        // Run non-fatal validator to surface warnings during development
+        ContractValidator().validate(map);
         final version = _extractVersion(map);
         // Debug summary for personalized contract
         _logContractSummary('fetchUserContract', map, ContractSource.personalized, userId: userId);

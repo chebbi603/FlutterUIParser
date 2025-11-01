@@ -9,6 +9,11 @@ The frontend renders UI and wiring from a single JSON document (the "canonical c
 - Endpoint (this repository): `GET /contracts/canonical` (public)
 - Alias (public): `GET /contracts/public/canonical` — identical response; provided to avoid dynamic route collisions.
 - Client fallback policy: The Flutter client first calls `/contracts/canonical` and, on non-200, falls back to `/contracts/public/canonical`. There is no local asset fallback; ensure backend availability or mock HTTP for tests.
+- Base URL configuration (frontend):
+  - Reads from compile-time flags `API_BASE_URL` or `API_URL`.
+  - If not set at compile time, reads from `.env` keys `API_BASE_URL` or `API_URL`.
+  - Default: `http://localhost:8081`.
+  - Android emulator localhost is remapped to `http://10.0.2.2:<port>` automatically.
 - Response: Canonical JSON with keys: `meta`, `services`, `pagesUI`, `state`, `eventsActions`, `themingAccessibility`, `assets`, `validations`, `permissionsFlags`, `pagination`, `analytics`.
 - Caching: Recommend `ETag` or `If-None-Match` support to avoid unnecessary downloads.
 - Versioning: Include `meta.version` and optionally `meta.apiSchemaVersion`.
@@ -117,6 +122,12 @@ Bearer token authentication is supported.
 - Login flow: Backend issues an access token (e.g., `POST /auth/login`).
 - Frontend sets header: `Authorization: Bearer <token>`.
 - Token refresh: Expose `POST /auth/refresh` if needed; contract can define actions to call it.
+ - Response fields (login): `{ "_id": "...", "role": "USER", "username": "user", "name": "User Name", "accessToken": "...", "refreshToken": "..." }`
+ - Client state mapping: On successful login, the Flutter client stores:
+   - `authToken` ← `accessToken`
+   - `refreshToken` ← `refreshToken`
+   - `state.user` ← `{ id: _id, role, username, name }`
+ - Template usage: Components can reference `${state.user.username}` or `${state.user.name}` directly in `text` and `image.src` templates.
 
 ## 7. Pagination & Filtering
 Standardize query parameters for list endpoints.
@@ -185,4 +196,12 @@ Example payload (tap on Login button):
     "isPersonalized": false
   }
 ]
+```
+## Update: Auth User Fields and Image Tokens (2025-11-01)
+- Backend `/auth/login` now returns `username` and `name` in addition to `_id`, `role`, and tokens.
+- Flutter `AuthService` persists `state.user.username` and `state.user.name`.
+- Image components support `${state.*}` and `${item.*}` templates in `src`.
+- Example image using user avatar URL from state:
+```json
+{ "type": "image", "src": "https://cdn.example.com/avatars/${state.user.username}.png", "style": { "width": 48, "height": 48, "borderRadius": 24 } }
 ```

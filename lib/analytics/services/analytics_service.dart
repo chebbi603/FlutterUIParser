@@ -110,6 +110,30 @@ class AnalyticsService extends ChangeNotifier {
     }
   }
 
+  /// Log authentication-related events with standardized payload
+  /// eventType: 'user_authenticated', 'logout', 'login_failed', 'token_refresh_failed',
+  /// as well as baseline page views: 'landing_page_viewed', 'login_page_viewed'
+  void logAuthEvent(String eventType, Map<String, dynamic> data) {
+    final sessionId = _getSessionIdFromState();
+    final now = DateTime.now();
+    final event = TrackingEvent(
+      id: _generateEventId(),
+      type: TrackingEventType.custom,
+      timestamp: now,
+      sessionId: sessionId,
+      pageId: 'auth',
+      data: {
+        'eventType': eventType,
+        'timestampIso': now.toIso8601String(),
+        // Explicit page scope for auth flow metrics
+        'pageScope': eventType.endsWith('_viewed') ? 'public' : 'auth',
+        ...data,
+      },
+      context: {},
+    );
+    track(event);
+  }
+
   /// Compatibility helper used by existing widgets
   Future<void> trackComponentInteraction({
     required String componentId,
@@ -123,7 +147,7 @@ class AnalyticsService extends ChangeNotifier {
       id: _generateEventId(),
       type: eventType,
       timestamp: DateTime.now(),
-      sessionId: 'default',
+      sessionId: _getSessionIdFromState(),
       componentId: componentId,
       componentType: componentType,
       pageId: pageId,
@@ -143,7 +167,7 @@ class AnalyticsService extends ChangeNotifier {
       id: _generateEventId(),
       type: eventType,
       timestamp: DateTime.now(),
-      sessionId: 'default',
+      sessionId: _getSessionIdFromState(),
       pageId: pageId,
       context: {},
     );
@@ -161,7 +185,7 @@ class AnalyticsService extends ChangeNotifier {
       id: _generateEventId(),
       type: TrackingEventType.error,
       timestamp: DateTime.now(),
-      sessionId: 'default',
+      sessionId: _getSessionIdFromState(),
       componentId: componentId,
       pageId: pageId,
       errorMessage: errorMessage,
@@ -228,6 +252,41 @@ class AnalyticsService extends ChangeNotifier {
       if (kDebugMode) print('🚀 Flushed $sent/${all.length} events to backend');
       events.removeRange(0, sent);
       notifyListeners();
+    }
+  }
+
+  /// Flush only baseline public-scope events for aggregate analysis
+  Future<void> flushPublicBaseline() async {
+    if (events.isEmpty) {
+      if (kDebugMode) print('📦 No events to flush (public baseline)');
+      return;
+    }
+    if (backendUrl == null || backendUrl!.isEmpty) {
+      if (kDebugMode) print('⚠️ No backendUrl configured; keeping ${events.length} events in memory');
+      return;
+    }
+    final formatted = events.map((e) => _formatEventForBackend(e)).toList();
+    final publicOnly = formatted.where((m) => (m['pageScope'] ?? 'public') == 'public').toList();
+    if (publicOnly.isEmpty) {
+      if (kDebugMode) print('ℹ️ No public-scope events to flush');
+      return;
+    }
+    try {
+      final res = await http.post(
+        Uri.parse(backendUrl!),
+        headers: { 'Content-Type': 'application/json' },
+        body: jsonEncode(publicOnly),
+      );
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        if (kDebugMode) print('🚀 Flushed ${publicOnly.length} public baseline events');
+        // Remove flushed public events from queue
+        _removeFlushed(publicOnly);
+        notifyListeners();
+      } else {
+        if (kDebugMode) print('❌ Public baseline flush failed: ${res.statusCode} ${res.body}');
+      }
+    } catch (e) {
+      if (kDebugMode) print('❌ Public baseline flush error: $e');
     }
   }
 
@@ -310,7 +369,7 @@ class AnalyticsService extends ChangeNotifier {
     final currentUserId = userObj?['id']?.toString();
     final out = <String, dynamic>{
       'timestamp': e.timestamp.millisecondsSinceEpoch,
-      'sessionId': e.sessionId,
+      'sessionId': _getSessionIdFromState(),
       'userId': currentUserId ?? e.userId, // always include, may be null
       'componentId': e.componentId ?? 'unknown',
       'eventType': typeStr,
@@ -330,6 +389,31 @@ class AnalyticsService extends ChangeNotifier {
       if (e.data.containsKey('error')) out['error'] = e.data['error'];
     }
     return out;
+  }
+
+  String _getSessionIdFromState() {
+    try {
+      final sid = _stateManager?.getGlobalState<String>('sessionId');
+      if (sid != null && sid.isNotEmpty) return sid;
+    } catch (_) {}
+    return 'default';
+  }
+
+  /// Remove flushed events from the in-memory queue by matching signatures
+  void _removeFlushed(List<Map<String, dynamic>> flushedBatch) {
+    final signatures = flushedBatch.map((m) {
+      final ts = m['timestamp'];
+      final sid = m['sessionId'];
+      final et = m['eventType'];
+      final cid = m['componentId'];
+      final scope = m['pageScope'];
+      return '$ts|$sid|$et|$cid|$scope';
+    }).toSet();
+    events.removeWhere((e) {
+      final fm = _formatEventForBackend(e);
+      final sig = '${fm['timestamp']}|${fm['sessionId']}|${fm['eventType']}|${fm['componentId']}|${fm['pageScope']}';
+      return signatures.contains(sig);
+    });
   }
 
   /// Determine if a page is public (shared) or authenticated (personalized)

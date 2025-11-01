@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:async';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'auth_service.dart';
 import '../models/config_models.dart';
@@ -258,6 +259,25 @@ class EnhancedApiService {
         attempts++;
 
         final uri = Uri.parse(url);
+        // Debug: print outgoing request
+        try {
+          final safeHeaders = Map<String, String>.from(headers);
+          if (safeHeaders.containsKey('Authorization')) {
+            safeHeaders['Authorization'] = '[REDACTED Bearer]';
+          }
+          debugPrint('[HTTP Request] ${method.toUpperCase()} ${uri.toString()}');
+          debugPrint('[HTTP Headers] ${json.encode(safeHeaders)}');
+          if (body != null) {
+            final bodyStr = body is String ? body : json.encode(body);
+            // Truncate very long bodies for readability
+            final truncated = bodyStr.length > 200
+                ? bodyStr.substring(0, 200) + '…(truncated)'
+                : bodyStr;
+            debugPrint('[HTTP Body] $truncated');
+          }
+        } catch (e) {
+          debugPrint('[HTTP Debug] Failed to log request: $e');
+        }
         http.Response response;
 
         switch (method.toUpperCase()) {
@@ -292,6 +312,18 @@ class EnhancedApiService {
             throw ApiException('Unsupported HTTP method: $method');
         }
 
+        // Debug: print response summary
+        try {
+          final bodyStr = response.body;
+          final truncated = bodyStr.length > 500
+              ? bodyStr.substring(0, 500) + '…(truncated)'
+              : bodyStr;
+          debugPrint('[HTTP Response] ${response.statusCode} ${method.toUpperCase()} ${uri.toString()}');
+          debugPrint('[Response Body] $truncated');
+        } catch (e) {
+          debugPrint('[HTTP Debug] Failed to log response: $e');
+        }
+
         // Return successful response or non-retryable error
         if (response.statusCode < 500 || attempts >= maxAttempts) {
           return response;
@@ -316,6 +348,8 @@ class EnhancedApiService {
 
   dynamic _parseResponse(http.Response response) {
     try {
+      // Debug: log before parsing
+      debugPrint('[HTTP Parse] status=${response.statusCode}, length=${response.body.length}');
       if (response.body.isEmpty) return null;
       return json.decode(response.body);
     } catch (e) {

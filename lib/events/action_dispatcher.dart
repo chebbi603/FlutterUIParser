@@ -2,12 +2,17 @@
 import 'dart:convert';
 import 'package:flutter/cupertino.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:provider/provider.dart';
 import '../models/config_models.dart';
 import '../services/api_service.dart';
 import '../state/state_manager.dart';
 import '../navigation/navigation_bridge.dart';
 import '../events/event_bus.dart';
 import '../events/action_middleware.dart';
+import '../services/auth_service.dart';
+import '../providers/contract_provider.dart';
+import '../analytics/services/analytics_service.dart';
+import '../analytics/models/tracking_event.dart';
 
 /// Enhanced action dispatcher with comprehensive action support
 class EnhancedActionDispatcher {
@@ -48,6 +53,12 @@ class EnhancedActionDispatcher {
           break;
         case 'apiCall':
           await _handleApiCall(context, config, additionalData);
+          break;
+        case 'authLogin':
+          await _handleAuthLogin(context, config);
+          break;
+        case 'authLogout':
+          await _handleAuthLogout(context, config);
           break;
         case 'updateState':
           await _handleUpdateState(config, additionalData);
@@ -115,6 +126,33 @@ class EnhancedActionDispatcher {
     }
   }
 
+  static Future<void> _handleAuthLogout(
+    BuildContext context,
+    ActionConfig config,
+  ) async {
+    // Attempt server-side logout via AuthService (best effort)
+    final authService = AuthService(_stateManager, _apiService);
+    try {
+      final provider = Provider.of<ContractProvider>(context, listen: false);
+      authService.attachContractProvider(provider);
+    } catch (_) {}
+    try {
+      await authService.logout();
+    } catch (_) {}
+
+    // Clear all persisted and in-memory state, including page-scoped fields
+    await _stateManager.clearAll();
+
+    // Log analytics logout event
+    AnalyticsService().logAuthEvent('logout', {});
+
+    // Navigate to landing page and clear stack
+    final switched = NavigationBridge.switchTo('/');
+    if (!switched) {
+      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+    }
+  }
+
   static Future<void> _handleNavigate(
     BuildContext context,
     ActionConfig config,
@@ -152,6 +190,62 @@ class EnhancedActionDispatcher {
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  static Future<void> _handleAuthLogin(
+    BuildContext context,
+    ActionConfig config,
+  ) async {
+    final formId =
+        config.params?['formId']?.toString() ?? config.key ?? 'login';
+    final data = _stateManager.getAllPageState(formId);
+    final email = (data['email'] ?? config.params?['email'])?.toString();
+    final password = (data['password'] ?? config.params?['password'])?.toString();
+
+    if (email == null || email.isEmpty || password == null || password.isEmpty) {
+      await _handleShowError(
+        context,
+        ActionConfig(action: 'showError', params: {
+          'message': 'Missing credentials',
+        }),
+      );
+      AnalyticsService().logAuthEvent('login_failed', {
+        'reason': 'missing_credentials',
+      });
+      return;
+    }
+
+    final authService = AuthService(_stateManager, _apiService);
+    try {
+      final provider = Provider.of<ContractProvider>(context, listen: false);
+      authService.attachContractProvider(provider);
+    } catch (_) {}
+
+    final ok = await authService.login(email: email, password: password);
+    final analytics = AnalyticsService();
+    if (ok) {
+      final userObj = _stateManager.getGlobalState<Map<String, dynamic>>('user');
+      final uid = userObj?['id']?.toString();
+      analytics.logAuthEvent('user_authenticated', {
+        if (uid != null) 'userId': uid,
+        'loginMethod': 'email',
+      });
+
+      final switched = NavigationBridge.switchTo('/home');
+      if (!switched) {
+        Navigator.of(context).pushReplacementNamed('/home');
+      }
+    } else {
+      await _handleShowError(
+        context,
+        ActionConfig(action: 'showError', params: {
+          'message': 'Invalid email or password',
+        }),
+      );
+      analytics.logAuthEvent('login_failed', {
+        'reason': 'invalid_credentials',
+      });
     }
   }
 
@@ -448,6 +542,62 @@ class EnhancedActionDispatcher {
     final service = config.service ?? config.params?['service']?.toString();
     final endpoint = config.endpoint ?? config.params?['endpoint']?.toString();
     if (service != null && endpoint != null) {
+      // Special-case: Auth login flow via AuthService to persist tokens/state
+      if (service == 'auth' && endpoint == 'login') {
+        final email = data['email']?.toString() ?? config.params?['email']?.toString();
+        final password = data['password']?.toString() ?? config.params?['password']?.toString();
+        if (email == null || email.isEmpty || password == null || password.isEmpty) {
+          await _handleShowError(
+            context,
+            ActionConfig(action: 'showError', params: {
+              'message': 'Missing credentials',
+            }),
+          );
+          AnalyticsService().logAuthEvent('login_failed', {
+            'reason': 'missing_credentials',
+          });
+          return;
+        }
+
+        final authService = AuthService(_stateManager, _apiService);
+        try {
+          final provider = Provider.of<ContractProvider>(context, listen: false);
+          authService.attachContractProvider(provider);
+        } catch (_) {}
+
+        final ok = await authService.login(email: email, password: password);
+        final analytics = AnalyticsService();
+        if (ok) {
+          final userObj = _stateManager.getGlobalState<Map<String, dynamic>>('user');
+          final uid = userObj?['id']?.toString();
+          analytics.logAuthEvent('user_authenticated', {
+            if (uid != null) 'userId': uid,
+            'loginMethod': 'email',
+          });
+          // Honor onSuccess if provided, otherwise default to /home
+          if (config.onSuccess != null) {
+            await execute(context, config.onSuccess!, {'response': {'ok': true}});
+          } else {
+            final switched = NavigationBridge.switchTo('/home');
+            if (!switched) {
+              Navigator.of(context).pushReplacementNamed('/home');
+            }
+          }
+        } else {
+          await _handleShowError(
+            context,
+            ActionConfig(action: 'showError', params: {
+              'message': 'Invalid email or password',
+            }),
+          );
+          analytics.logAuthEvent('login_failed', {
+            'reason': 'invalid_credentials',
+          });
+        }
+        // For auth login, skip generic API call and summary dialog
+        return;
+      }
+
       // Merge any static params with form data for request body
       final payload = <String, dynamic>{};
       if (config.params != null) {

@@ -15,12 +15,27 @@ Future<void> main() async {
     // If no .env file, continue with defaults
   }
 
-  // Resolve backend base URL from compile-time define with sensible defaults
-  String baseUrl = const String.fromEnvironment('API_URL', defaultValue: 'http://localhost:8081');
-  baseUrl = baseUrl.trim().isEmpty ? 'http://localhost:8081' : baseUrl.trim();
+  // Resolve backend base URL from compile-time or .env with sensible defaults
+  // Priority: compile-time (API_BASE_URL, API_URL) → .env (API_BASE_URL, API_URL) → default
+  String baseUrl = const String.fromEnvironment('API_BASE_URL', defaultValue: '');
+  if (baseUrl.trim().isEmpty) {
+    baseUrl = const String.fromEnvironment('API_URL', defaultValue: '');
+  }
+  if (baseUrl.trim().isEmpty && dotenv.isInitialized) {
+    baseUrl = (dotenv.env['API_BASE_URL'] ?? dotenv.env['API_URL'] ?? '').trim();
+  }
+  if (baseUrl.trim().isEmpty) {
+    baseUrl = 'http://localhost:8081';
+  }
+  baseUrl = baseUrl.trim();
   // Android emulator requires 10.0.2.2 for host machine
-  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android && baseUrl == 'http://localhost:8081') {
-    baseUrl = 'http://10.0.2.2:8081';
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    final normalizedLocal = baseUrl.replaceAll('127.0.0.1', 'localhost');
+    if (normalizedLocal.startsWith('http://localhost:')) {
+      final uri = Uri.tryParse(normalizedLocal);
+      final port = uri?.port ?? 8081;
+      baseUrl = 'http://10.0.2.2:$port';
+    }
   }
 
   // Initialize core services before provider creation

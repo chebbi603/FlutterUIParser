@@ -61,19 +61,8 @@ class ContractLoader {
   }
 
   Future<CanonicalContract> loadFromAssets() async {
-    String? contents;
-    try {
-      contents = await rootBundle.loadString('assets/contracts/canonical.json');
-    } catch (_) {
-      // Fallback to legacy path for demo compatibility
-      contents = await rootBundle.loadString('assets/canonical_contract.json');
-    }
-
-    final dynamic raw = json.decode(contents);
-    if (!_isValidStructure(raw)) {
-      throw Exception('Canonical contract validation failed');
-    }
-    return CanonicalContract.fromJson(Map<String, dynamic>.from(raw));
+    // Asset fallback disabled: enforce backend-only contract loading
+    throw UnsupportedError('Asset fallback disabled: canonical contract must be fetched from backend');
   }
 
   Future<CanonicalContract?> fetchFromApi({

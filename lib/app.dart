@@ -16,6 +16,8 @@ import 'providers/contract_provider.dart';
 import 'screens/offline_screen.dart';
 import 'analytics/services/analytics_service.dart';
 import 'analytics/models/tracking_event.dart';
+import 'middleware/auth_gate.dart';
+// Removed UI diagnostic scanner import; no dev-only overlays in production UI
 
 // Note: AnalyticsService configuration now happens when contract loads inside MyApp.
 
@@ -40,6 +42,7 @@ class _MyAppState extends State<MyApp> {
   String? _lastAuthToken;
   String? _lastUserId;
   bool _isRefreshing = false;
+  AuthGate? _authGate;
 
   @override
   void initState() {
@@ -115,9 +118,18 @@ class _MyAppState extends State<MyApp> {
     if (initState) {
       await stateManager.initialize(loadedContract.state);
     }
+    // Ensure sessionId exists for analytics grouping
+    final existingSessionId = stateManager.getGlobalState<String>('sessionId');
+    if (existingSessionId == null || existingSessionId.isEmpty) {
+      final sid = _generateSessionId();
+      await stateManager.setGlobalState('sessionId', sid);
+    }
     apiService.initialize(loadedContract);
     permissionManager.initialize(loadedContract.permissionsFlags);
     EnhancedComponentFactory.initialize(loadedContract);
+
+    _authGate = AuthGate(stateManager: stateManager);
+    await _authGate!.init();
 
     // Attach auth service and restore persisted tokens
     final authService = AuthService(stateManager, apiService);
@@ -126,6 +138,10 @@ class _MyAppState extends State<MyApp> {
     try {
       final provider = Provider.of<ContractProvider>(context, listen: false);
       authService.attachContractProvider(provider);
+      // Provide ContractProvider to AuthGate for dynamic route protection
+      _authGate?.attachContractProvider(provider);
+      // Allow ContractProvider to attempt token refresh on 401 via AuthService
+      provider.attachAuthService(authService);
     } catch (_) {}
     final persistedAccess = stateManager.getGlobalState<String>('authToken');
     if (persistedAccess != null && persistedAccess.isNotEmpty) {
@@ -155,6 +171,12 @@ class _MyAppState extends State<MyApp> {
         debugPrint('Executing startup action: ${action.action}');
       }
     }
+  }
+
+  String _generateSessionId() {
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    final rnd = (ts ^ (ts >> 3)) & 0xFFFF;
+    return 'sess_${ts}_$rnd';
   }
 
   Future<void> _attemptApiRefresh() async {
@@ -197,6 +219,47 @@ class _MyAppState extends State<MyApp> {
     if (token.isNotEmpty && userId != null && changed) {
       unawaited(_attemptApiRefresh());
     }
+  }
+
+  bool _isAuthed() {
+    try {
+      final token = stateManager.getGlobalState<String>('authToken');
+      final user = stateManager.getGlobalState<Map<String, dynamic>>('user');
+      final uid = user?['id']?.toString();
+      return token != null && token.isNotEmpty && uid != null && uid.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  void _logAuthCheck(String routeName, bool allowed) {
+    final analytics = AnalyticsService();
+    analytics.logAuthEvent('auth_check', {
+      'route': routeName,
+      'allowed': allowed,
+    });
+  }
+
+  Widget _buildLoginPageWidget() {
+    final loginRoute = contract!.pagesUI.routes['/login'];
+    if (loginRoute != null) {
+      final page = contract!.pagesUI.pages[loginRoute.pageId];
+      if (page != null) {
+        // Analytics: login page viewed
+        AnalyticsService().logAuthEvent('login_page_viewed', {
+          'source': 'navigation',
+        });
+        return _wrapWithRefresh(EnhancedPageBuilder(config: page, trackedIds: _trackedIds));
+      }
+    }
+    return const CupertinoPageScaffold(
+      child: Center(child: Text('Please log in')),
+    );
+  }
+
+  Route<dynamic> _buildLoginRoute(RouteSettings? settings) {
+    final widget = _buildLoginPageWidget();
+    return CupertinoPageRoute(builder: (_) => widget, settings: settings);
   }
 
   // Base URL resolution moved to main.dart; contract-specific services read directly from the contract.
@@ -293,13 +356,91 @@ class _MyAppState extends State<MyApp> {
   }
 
   CupertinoThemeData _buildTheme() {
-    return const CupertinoThemeData(brightness: Brightness.light);
+    final themeMode = stateManager.getGlobalState<String>('theme') ?? 'light';
+    final isDark = themeMode.toLowerCase() == 'dark';
+
+    final tokens = contract!.themingAccessibility.tokens[themeMode] ?? {};
+    final primary = _parseHexColor(tokens['primary'] ?? (isDark ? '#0A84FF' : '#007AFF'));
+    final surface = _parseHexColor(tokens['surface'] ?? (isDark ? '#1C1C1E' : '#FFFFFF'));
+    final background = _parseHexColor(tokens['background'] ?? (isDark ? '#000000' : '#F8F9FA'));
+    final onSurface = _parseHexColor(tokens['onSurface'] ?? (isDark ? '#FFFFFF' : '#121212'));
+
+    final typo = contract!.themingAccessibility.typography;
+    TextStyle baseText = const TextStyle(fontSize: 17, fontWeight: FontWeight.w400);
+    if (typo.containsKey('body')) {
+      final body = typo['body']!;
+      baseText = baseText.copyWith(
+        fontSize: (body.fontSize ?? 17).toDouble(),
+        fontWeight: _mapFontWeight(body.fontWeight),
+        color: onSurface,
+      );
+    } else {
+      baseText = baseText.copyWith(color: onSurface);
+    }
+
+    final title1 = typo['title1'];
+    final navTitle = (title1 != null)
+        ? baseText.copyWith(
+            fontSize: (title1.fontSize ?? 28).toDouble(),
+            fontWeight: _mapFontWeight(title1.fontWeight),
+          )
+        : baseText.copyWith(fontSize: 28, fontWeight: FontWeight.w600);
+
+    final textTheme = CupertinoTextThemeData(
+      textStyle: baseText,
+      actionTextStyle: baseText.copyWith(color: primary),
+      tabLabelTextStyle: baseText.copyWith(fontSize: 12),
+      navTitleTextStyle: navTitle,
+    );
+
+    return CupertinoThemeData(
+      brightness: isDark ? Brightness.dark : Brightness.light,
+      primaryColor: primary ?? (isDark ? CupertinoColors.systemBlue : CupertinoColors.activeBlue),
+      barBackgroundColor: surface ?? (isDark ? CupertinoColors.darkBackgroundGray : CupertinoColors.systemBackground),
+      scaffoldBackgroundColor: background ?? (isDark ? CupertinoColors.black : CupertinoColors.systemGroupedBackground),
+      textTheme: textTheme,
+    );
+  }
+
+  FontWeight _mapFontWeight(String? fw) {
+    switch (fw?.toLowerCase()) {
+      case 'thin':
+        return FontWeight.w100;
+      case 'extralight':
+      case 'ultralight':
+        return FontWeight.w200;
+      case 'light':
+        return FontWeight.w300;
+      case 'regular':
+      case 'normal':
+        return FontWeight.w400;
+      case 'medium':
+        return FontWeight.w500;
+      case 'semibold':
+      case 'demibold':
+        return FontWeight.w600;
+      case 'bold':
+        return FontWeight.w700;
+      case 'extrabold':
+      case 'heavy':
+        return FontWeight.w800;
+      case 'black':
+        return FontWeight.w900;
+      default:
+        return FontWeight.w400;
+    }
   }
 
   Widget _buildHome() {
     final pagesUI = contract!.pagesUI;
 
     if (pagesUI.bottomNavigation?.enabled == true) {
+      final requiresAuth = _authGate?.isRouteProtected('/home') ?? false;
+      final allowed = !requiresAuth || _isAuthed();
+      _logAuthCheck('bottomNavigation', allowed);
+      if (!allowed) {
+        return _buildLoginPageWidget();
+      }
       return _buildTabbedHome();
     }
 
@@ -307,6 +448,16 @@ class _MyAppState extends State<MyApp> {
     if (homeRoute != null) {
       final page = pagesUI.pages[homeRoute.pageId];
       if (page != null) {
+        final requiresAuth = _authGate?.isRouteProtected('/') ?? false;
+        final allowed = !requiresAuth || _isAuthed();
+        _logAuthCheck('/', allowed);
+        if (!allowed) {
+          return _buildLoginPageWidget();
+        }
+        // Analytics: landing page viewed at app start
+        AnalyticsService().logAuthEvent('landing_page_viewed', {
+          'source': 'app_start',
+        });
         return _wrapWithRefresh(EnhancedPageBuilder(config: page, trackedIds: _trackedIds));
       }
     }
@@ -329,30 +480,47 @@ class _MyAppState extends State<MyApp> {
     );
 
     final tabPages = bottomNav.items.map((item) {
-      final page = pages[item.pageId];
+      EnhancedPageConfig? page;
+      if (item.pageId.isNotEmpty) {
+        page = pages[item.pageId];
+      } else if (item.route != null && item.route!.isNotEmpty) {
+        final rc = contract!.pagesUI.routes[item.route!];
+        if (rc != null) {
+          page = pages[rc.pageId];
+        }
+      }
       return page ?? pages.values.first;
     }).toList();
 
     final Map<String, int> routeToIndex = {};
     for (var i = 0; i < bottomNav.items.length; i++) {
       final item = bottomNav.items[i];
-      contract!.pagesUI.routes.forEach((routeName, routeConfig) {
-        if (routeConfig.pageId == item.pageId) {
-          routeToIndex[routeName] = i;
-        }
-      });
+      // If item specifies a route, map directly
+      if (item.route != null && item.route!.isNotEmpty) {
+        routeToIndex[item.route!] = i;
+      } else {
+        // Otherwise, infer from routes matching pageId
+        contract!.pagesUI.routes.forEach((routeName, routeConfig) {
+          if (routeConfig.pageId == item.pageId) {
+            routeToIndex[routeName] = i;
+          }
+        });
+      }
     }
 
     NavigationBridge.tabController = _tabController;
     NavigationBridge.routeToIndex = routeToIndex;
+    // Wire auth checks for tab navigation enforcement
+    NavigationBridge.isRouteProtected = (route) => _authGate?.isRouteProtected(route) ?? false;
+    NavigationBridge.isAuthed = () => _isAuthed();
 
     return CupertinoTabScaffold(
       controller: _tabController,
       tabBar: CupertinoTabBar(
         currentIndex: bottomNav.initialIndex,
-        backgroundColor: _parseColor(bottomNav.style?.backgroundColor) ?? CupertinoColors.systemBackground,
-        activeColor: _parseColor(bottomNav.style?.foregroundColor) ?? CupertinoColors.activeBlue,
-        inactiveColor: _parseColor(bottomNav.style?.color) ?? CupertinoColors.inactiveGray,
+        backgroundColor: _parseColor(bottomNav.style?.backgroundColor) ?? CupertinoTheme.of(context).barBackgroundColor,
+        activeColor: _parseColor(bottomNav.style?.foregroundColor) ?? CupertinoTheme.of(context).primaryColor,
+        inactiveColor: _parseColor(bottomNav.style?.color) ?? (CupertinoTheme.of(context).textTheme.tabLabelTextStyle.color ?? CupertinoColors.inactiveGray),
         items: bottomNav.items.map((item) {
           final mapped = contract!.assets.icons[item.icon];
           final iconData = ParsingUtils.parseIcon(mapped ?? item.icon);
@@ -364,7 +532,7 @@ class _MyAppState extends State<MyApp> {
       ),
       tabBuilder: (context, index) {
         return CupertinoTabView(
-          builder: (_) => _wrapWithRefresh(EnhancedPageBuilder(config: tabPages[index], trackedIds: _trackedIds)),
+          builder: (_) => EnhancedPageBuilder(config: tabPages[index], trackedIds: _trackedIds),
           onGenerateRoute: _generateRoute,
         );
       },
@@ -374,6 +542,18 @@ class _MyAppState extends State<MyApp> {
   Route<dynamic>? _generateRoute(RouteSettings settings) {
     final routeName = settings.name ?? '/';
     final routeConfig = contract!.pagesUI.routes[routeName];
+    if (routeName == '/home') {
+      final requiresAuth = _authGate?.isRouteProtected('/home') ?? false;
+      final allowed = !requiresAuth || _isAuthed();
+      _logAuthCheck('/home', allowed);
+      if (!allowed) {
+        AnalyticsService().logAuthEvent('login_page_viewed', {
+          'source': 'deep_link',
+          'attemptedRoute': routeName,
+        });
+        return _buildLoginRoute(settings);
+      }
+    }
 
     if (routeConfig == null) {
       return CupertinoPageRoute(
@@ -383,24 +563,15 @@ class _MyAppState extends State<MyApp> {
       );
     }
 
-    if (routeConfig.auth == true) {
-      final authToken = stateManager.getGlobalState<String>('authToken');
-      if (authToken == null || authToken.isEmpty) {
-        final loginRoute = contract!.pagesUI.routes['/login'];
-        if (loginRoute != null) {
-          final page = contract!.pagesUI.pages[loginRoute.pageId];
-          if (page != null) {
-            return CupertinoPageRoute(
-              builder: (_) => EnhancedPageBuilder(config: page, trackedIds: _trackedIds),
-            );
-          }
-        }
-        return CupertinoPageRoute(
-          builder: (_) => const CupertinoPageScaffold(
-            child: Center(child: Text('Please log in')),
-          ),
-        );
-      }
+    final requiresAuth = _authGate?.isRouteProtected(routeName) ?? false;
+    final allowed = !requiresAuth || _isAuthed();
+    _logAuthCheck(routeName, allowed);
+    if (!allowed) {
+      AnalyticsService().logAuthEvent('login_page_viewed', {
+        'source': 'redirect_from_protected',
+        'attemptedRoute': routeName,
+      });
+      return _buildLoginRoute(settings);
     }
 
     final page = contract!.pagesUI.pages[routeConfig.pageId];
@@ -419,99 +590,8 @@ class _MyAppState extends State<MyApp> {
   }
 
   Widget _wrapWithRefresh(Widget child) {
-    final provider = Provider.of<ContractProvider>(context);
-    final hasError = provider.error != null;
-    final errorBanner = hasError
-        ? Container(
-            color: CupertinoColors.destructiveRed.withOpacity(0.1),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(
-              children: [
-                const Icon(CupertinoIcons.exclamationmark_triangle, color: CupertinoColors.destructiveRed, size: 18),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    provider.error!,
-                    style: const TextStyle(color: CupertinoColors.destructiveRed, fontSize: 13),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 2,
-                  ),
-                ),
-                CupertinoButton(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  onPressed: provider.loading ? null : () => provider.refresh(),
-                  child: const Text('Retry'),
-                ),
-              ],
-            ),
-          )
-        : const SizedBox.shrink();
-
-    // Optional banner to indicate refresh disabled (e.g., offline or no backend URL)
-    final refreshDisabledBanner = (!provider.canRefresh)
-        ? Container(
-            color: CupertinoColors.systemGrey6,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(
-              children: const [
-                Icon(CupertinoIcons.wifi_exclamationmark, color: CupertinoColors.inactiveGray, size: 18),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Pull-to-refresh unavailable (offline or no backend configured).',
-                    style: TextStyle(color: CupertinoColors.secondaryLabel, fontSize: 13),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 2,
-                  ),
-                ),
-              ],
-            ),
-          )
-        : const SizedBox.shrink();
-
-    // Debug-only analytics test trigger
-    final devAnalyticsButton = kDebugMode
-        ? Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: CupertinoButton(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              color: CupertinoColors.activeBlue,
-              onPressed: () async {
-                final svc = AnalyticsService();
-                await svc.trackComponentInteraction(
-                  componentId: 'test-button',
-                  componentType: 'debug',
-                  eventType: TrackingEventType.custom,
-                  data: const {'tag': 'test'},
-                );
-                await svc.flush();
-                // ignore: avoid_print
-                print('Dev analytics: test event sent and flush requested');
-              },
-              child: const Text('Send Test Analytics'),
-            ),
-          )
-        : const SizedBox.shrink();
-
-    return CustomScrollView(
-      slivers: [
-        CupertinoSliverRefreshControl(
-          onRefresh: provider.canRefresh
-              ? () => Provider.of<ContractProvider>(context, listen: false).refresh()
-              : null,
-        ),
-        SliverToBoxAdapter(
-          child: Column(
-            children: [
-              errorBanner,
-              refreshDisabledBanner,
-              devAnalyticsButton,
-              child,
-            ],
-          ),
-        ),
-      ],
-    );
+    // Contract-first: no extra banners, overlays, or pull-to-refresh
+    return child;
   }
 
   Color? _parseColor(String? colorString) {

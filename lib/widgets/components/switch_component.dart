@@ -10,7 +10,7 @@ class SwitchComponent {
   static Widget build(EnhancedComponentConfig config) {
     String? stateKey;
     if (config.binding != null) {
-      if (config.binding!.startsWith('\${state.')) {
+      if (config.binding!.startsWith(r'${state.')) {
         stateKey = config.binding!.substring(8, config.binding!.length - 1);
       } else {
         stateKey = config.binding;

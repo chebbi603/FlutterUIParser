@@ -16,6 +16,11 @@ This document describes the `ContractService` responsible for fetching the canon
 - Timeout: `10s` enforced per request using `.timeout(Duration(seconds: 10))`
 - Headers: `Accept: application/json`
 - URL join: Safe join of `baseUrl` with endpoint path (`/contracts/canonical`, `/contracts/public/canonical`, `/users/{userId}/contract`).
+ - Base URL resolution order (frontend):
+   1. `.env` keys `API_BASE_URL` or `API_URL`
+   2. Compile-time defines `API_BASE_URL` or `API_URL`
+   3. Default `http://localhost:8081`
+   4. Android emulator: `localhost` remaps to `http://10.0.2.2:<port>`
 
 ## Fallback Strategy
 ### Canonical
@@ -44,6 +49,16 @@ This document describes the `ContractService` responsible for fetching the canon
 ## Error Handling & Logging
 - Exceptions caught: `TimeoutException`, `FormatException`, `http.ClientException`, plus generic `Exception` for cross-platform network errors.
 - Logs each step with context: primary attempt, fallback attempt, and all caught exceptions.
+ 
+## Contract Validator (new)
+- Location: `lib/services/contract_validator.dart`
+- Purpose: Perform non-fatal, deeper checks on the parsed contract to surface potential issues early during development.
+- Invocation: Automatically executed after `_validateContractStructure(map)` inside `ContractService` for canonical and personalized contracts.
+- Behavior:
+  - Validates `meta` (`version`, `appName`) and `pagesUI` (`pages`, `routes` are objects and non-empty).
+  - Optionally inspects `themingAccessibility.tokens` and `typography` presence.
+  - Logs warnings in debug mode; never throws or blocks rendering.
+- Rationale: Ensures contract quality without impacting runtime; aids diagnostics when iterating on backend schemas.
 
 ## Usage Example
 ```dart
@@ -51,7 +66,14 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'services/contract_service.dart';
 
 Future<void> loadContracts() async {
-  final base = (dotenv.isInitialized ? dotenv.env['API_BASE_URL'] : null) ?? 'http://localhost:8081';
+  final envBase = dotenv.isInitialized
+      ? (dotenv.env['API_BASE_URL'] ?? dotenv.env['API_URL'])
+      : null;
+  const defineBase = String.fromEnvironment('API_BASE_URL', defaultValue: '')
+      .isNotEmpty
+      ? const String.fromEnvironment('API_BASE_URL')
+      : const String.fromEnvironment('API_URL', defaultValue: '');
+  final base = envBase ?? (defineBase.isNotEmpty ? defineBase : 'http://localhost:8081');
   final service = ContractService(baseUrl: base);
 
   // Canonical

@@ -44,8 +44,7 @@ A production-grade Flutter framework where a single canonical JSON contract serv
 ```
 demo_json_parser/
 ├── assets/
-│   ├── canonical_contract.json    # Main contract file
-│   └── advanced_config.json       # Legacy config (for migration)
+│   └── canonical_contract.schema.json    # Contract schema (for validation)
 ├── lib/
 │   ├── models/
 │   │   └── enhanced_config_models.dart    # Type-safe contract models
@@ -94,7 +93,7 @@ flutter run
 
 ### 3. Explore the Contract
 
-Edit `assets/canonical_contract.json` to see real-time changes in the app.
+The canonical contract is served by your backend; update it on the server and use pull-to-refresh in the app to apply changes.
 
 ## 📖 Documentation
 
@@ -110,27 +109,35 @@ Edit `assets/canonical_contract.json` to see real-time changes in the app.
 - Canonical fetch flow:
   - Primary: `GET /contracts/canonical` (public)
   - Fallback: `GET /contracts/public/canonical` (public alias) when the primary returns `401` or `404` due to route collisions.
-  - Final fallback: load `assets/canonical_contract.json` when the backend is unavailable.
+  - No local asset fallback: when the backend is unavailable, the app shows an Offline screen.
 - Emulator run (iOS):
   - Launch the iOS Simulator (`open -a Simulator`) and run `flutter run`.
   - Ensure your backend is running on `8081` to serve the canonical contract.
 
 ### Environment Variables and Startup
 
-- The app reads the backend base URL from the compile-time define `API_URL` in `lib/main.dart`.
-- If `API_URL` is not provided, it defaults to `http://localhost:8081`.
-- Android emulator note: when using the Android emulator, `localhost` resolves to the device. Use `http://10.0.2.2:8081`.
+- Base URL resolution in `lib/main.dart`:
+  - First: `.env` keys `API_BASE_URL` or `API_URL` (via `flutter_dotenv`).
+  - Then: compile-time defines `API_BASE_URL` or `API_URL`.
+  - Finally: default to `http://localhost:8081`.
+- Android emulator localhost is remapped automatically to `http://10.0.2.2:<port>` when using `localhost`.
 
 Examples:
 
 ```bash
 # iOS simulator (defaults to localhost:8081)
+flutter run --dart-define=API_BASE_URL=http://localhost:8081
+# Or
 flutter run --dart-define=API_URL=http://localhost:8081
 
-# Android emulator (use 10.0.2.2)
+# Android emulator (localhost remaps to 10.0.2.2)
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8081
+# Or
 flutter run --dart-define=API_URL=http://10.0.2.2:8081
 
 # Web (Chrome)
+flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:8081
+# Or
 flutter run -d chrome --dart-define=API_URL=http://localhost:8081
 ```
 
@@ -298,7 +305,7 @@ The original JSON-driven UI demo is still available:
 ## 💾 State Persistence
 
 - Global and page state can be persisted automatically based on the contract.
-- Add `persistence` on state fields in `assets/canonical_contract.json`:
+- Add `persistence` on state fields in the canonical contract JSON:
 
 ```json
 {

@@ -36,12 +36,74 @@ class CanonicalContract {
   factory CanonicalContract.fromJson(Map<String, dynamic> json) {
     return CanonicalContract(
       meta: MetaConfig.fromJson(json['meta'] ?? {}),
-      dataModels: (json['dataModels'] as Map<String, dynamic>? ?? {}).map(
-        (key, value) => MapEntry(key, DataModel.fromJson(value)),
-      ),
-      services: (json['services'] as Map<String, dynamic>? ?? {}).map(
-        (key, value) => MapEntry(key, ServiceConfig.fromJson(value)),
-      ),
+      dataModels: (() {
+        final raw = json['dataModels'];
+        final Map<String, dynamic> source = {};
+        if (raw is Map<String, dynamic>) {
+          source.addAll(raw);
+        } else if (raw is List) {
+          for (int i = 0; i < raw.length; i++) {
+            final item = raw[i];
+            if (item is Map<String, dynamic>) {
+              final key = item['name']?.toString() ?? item['id']?.toString() ?? 'model_$i';
+              source[key] = item;
+            }
+          }
+        }
+        return source.map((key, value) => MapEntry(key, DataModel.fromJson(value)));
+      })(),
+      services: (() {
+        final raw = json['services'];
+        final Map<String, dynamic> source = {};
+        if (raw is Map<String, dynamic>) {
+          raw.forEach((key, value) {
+            if (value is Map<String, dynamic>) {
+              source[key] = value;
+            } else if (value is String) {
+              source[key] = {'baseUrl': value};
+            } else if (value is List) {
+              source[key] = {'endpoints': value};
+            } else if (value != null) {
+              // Fallback: wrap unknown types as endpoints if reasonably stringifiable
+              source[key] = {'endpoints': [value]};
+            }
+          });
+        } else if (raw is List) {
+          for (int i = 0; i < raw.length; i++) {
+            final item = raw[i];
+            if (item is Map<String, dynamic>) {
+              final key = item['name']?.toString() ?? item['id']?.toString() ?? 'service_$i';
+              source[key] = item;
+            } else if (item is String) {
+              source['service_$i'] = {'baseUrl': item};
+            } else if (item is List) {
+              source['service_$i'] = {'endpoints': item};
+            }
+          }
+        }
+        // Add canonical aliases for service keys (e.g., AuthService -> auth)
+        final Map<String, dynamic> withAliases = {};
+        String? _aliasFor(String key) {
+          final lower = key.toLowerCase();
+          if (lower.endsWith('service')) {
+            final trimmed = lower.substring(0, lower.length - 'service'.length);
+            return trimmed.isNotEmpty ? trimmed : null;
+          }
+          if (lower.endsWith('api')) {
+            final trimmed = lower.substring(0, lower.length - 'api'.length);
+            return trimmed.isNotEmpty ? trimmed : null;
+          }
+          return null;
+        }
+        source.forEach((key, value) {
+          withAliases[key] = value;
+          final alias = _aliasFor(key);
+          if (alias != null && !withAliases.containsKey(alias)) {
+            withAliases[alias] = value;
+          }
+        });
+        return withAliases.map((key, value) => MapEntry(key, ServiceConfig.fromJson(value)));
+      })(),
       pagesUI: PagesUIConfig.fromJson(json['pagesUI'] ?? {}),
       state: StateConfig.fromJson(json['state'] ?? {}),
       eventsActions: EventsActionsConfig.fromJson(json['eventsActions'] ?? {}),
@@ -248,12 +310,49 @@ class ServiceConfig {
 
   ServiceConfig({required this.baseUrl, required this.endpoints});
 
-  factory ServiceConfig.fromJson(Map<String, dynamic> json) {
+  factory ServiceConfig.fromJson(dynamic json) {
+    final Map<String, dynamic> map = json is Map<String, dynamic>
+        ? json
+        : {
+            'baseUrl': json?.toString() ?? '',
+          };
     return ServiceConfig(
-      baseUrl: json['baseUrl'] ?? '',
-      endpoints: (json['endpoints'] as Map<String, dynamic>? ?? {}).map(
-        (key, value) => MapEntry(key, EndpointConfig.fromJson(value)),
-      ),
+      baseUrl: map['baseUrl'] ?? '',
+      endpoints: (() {
+        final raw = map['endpoints'];
+        final Map<String, dynamic> source = {};
+        if (raw is Map<String, dynamic>) {
+          raw.forEach((key, value) {
+            if (value is Map<String, dynamic>) {
+              source[key] = value;
+            } else if (value != null) {
+              source[key] = {
+                'path': value.toString(),
+                'method': 'GET',
+              };
+            }
+          });
+        } else if (raw is List) {
+          for (int i = 0; i < raw.length; i++) {
+            final item = raw[i];
+            final keyBase = 'endpoint_$i';
+            if (item is Map<String, dynamic>) {
+              final key = item['name']?.toString() ?? item['id']?.toString() ?? item['path']?.toString() ?? keyBase;
+              source[key] = item;
+            } else if (item != null) {
+              source[keyBase] = {
+                'path': item.toString(),
+                'method': 'GET',
+              };
+            }
+          }
+        }
+        final Map<String, EndpointConfig> parsed = {};
+        source.forEach((key, value) {
+          parsed[key] = EndpointConfig.fromJson(value);
+        });
+        return parsed;
+      })(),
     );
   }
 }
@@ -281,27 +380,52 @@ class EndpointConfig {
     this.retryPolicy,
   });
 
-  factory EndpointConfig.fromJson(Map<String, dynamic> json) {
+  factory EndpointConfig.fromJson(dynamic json) {
+    // Debug: capture incoming shape for robust parsing
+    try {
+      debugPrint('EndpointConfig.fromJson input type: ' + (json?.runtimeType?.toString() ?? 'null'));
+    } catch (_) {}
+    final Map<String, dynamic> map = json is Map<String, dynamic>
+        ? json
+        : {
+            'path': json?.toString() ?? '',
+            'method': 'GET',
+          };
+
+    final qpRaw = map['queryParams'];
+    final Map<String, QueryParamConfig>? qp = qpRaw is Map<String, dynamic>
+        ? qpRaw.map((key, value) {
+            final Map<String, dynamic> vmap = value is Map<String, dynamic>
+                ? value
+                : {
+                    'type': 'string',
+                    'default': value,
+                  };
+            return MapEntry(key, QueryParamConfig.fromJson(vmap));
+          })
+        : null;
+
     return EndpointConfig(
-      path: json['path'] ?? '',
-      method: json['method'] ?? 'GET',
-      auth: json['auth'],
-      queryParams:
-          json['queryParams'] != null
-              ? (json['queryParams'] as Map<String, dynamic>).map(
-                (key, value) => MapEntry(key, QueryParamConfig.fromJson(value)),
-              )
-              : null,
-      requestSchema: json['requestSchema'],
-      responseSchema: json['responseSchema'],
-      errorCodes: json['errorCodes']?.cast<String, String>(),
+      path: map['path'] ?? '',
+      method: map['method'] ?? 'GET',
+      auth: map['auth'],
+      queryParams: qp,
+      requestSchema: map['requestSchema'] is Map<String, dynamic>
+          ? map['requestSchema'] as Map<String, dynamic>
+          : null,
+      responseSchema: map['responseSchema'] is Map<String, dynamic>
+          ? map['responseSchema'] as Map<String, dynamic>
+          : null,
+      errorCodes: map['errorCodes'] is Map
+          ? (map['errorCodes'] as Map).map(
+              (key, value) => MapEntry(key.toString(), value.toString()),
+            )
+          : null,
       caching:
-          json['caching'] != null
-              ? CachingConfig.fromJson(json['caching'])
-              : null,
+          map['caching'] != null ? CachingConfig.fromJson(map['caching']) : null,
       retryPolicy:
-          json['retryPolicy'] != null
-              ? RetryPolicyConfig.fromJson(json['retryPolicy'])
+          map['retryPolicy'] != null
+              ? RetryPolicyConfig.fromJson(map['retryPolicy'])
               : null,
     );
   }
@@ -342,11 +466,26 @@ class CachingConfig {
 
   CachingConfig({required this.enabled, this.ttlSeconds});
 
-  factory CachingConfig.fromJson(Map<String, dynamic> json) {
-    return CachingConfig(
-      enabled: json['enabled'] ?? false,
-      ttlSeconds: json['ttlSeconds'],
-    );
+  factory CachingConfig.fromJson(dynamic json) {
+    if (json is Map<String, dynamic>) {
+      return CachingConfig(
+        enabled: json['enabled'] ?? false,
+        ttlSeconds: json['ttlSeconds'],
+      );
+    }
+    if (json is bool) {
+      return CachingConfig(enabled: json, ttlSeconds: null);
+    }
+    if (json is num) {
+      return CachingConfig(enabled: true, ttlSeconds: json.toInt());
+    }
+    if (json is String) {
+      final normalized = json.toLowerCase().trim();
+      final enabled = normalized == 'true' || normalized == 'enabled' || normalized == 'on' || normalized == 'yes';
+      final ttl = int.tryParse(normalized);
+      return CachingConfig(enabled: enabled || ttl != null, ttlSeconds: ttl);
+    }
+    return CachingConfig(enabled: false, ttlSeconds: null);
   }
 }
 
@@ -356,11 +495,28 @@ class RetryPolicyConfig {
 
   RetryPolicyConfig({required this.maxAttempts, required this.backoffMs});
 
-  factory RetryPolicyConfig.fromJson(Map<String, dynamic> json) {
-    return RetryPolicyConfig(
-      maxAttempts: json['maxAttempts'] ?? 3,
-      backoffMs: json['backoffMs'] ?? 1000,
-    );
+  factory RetryPolicyConfig.fromJson(dynamic json) {
+    if (json is Map<String, dynamic>) {
+      return RetryPolicyConfig(
+        maxAttempts: json['maxAttempts'] ?? 3,
+        backoffMs: json['backoffMs'] ?? 1000,
+      );
+    }
+    if (json is num) {
+      return RetryPolicyConfig(maxAttempts: json.toInt(), backoffMs: 1000);
+    }
+    if (json is String) {
+      final normalized = json.toLowerCase().trim();
+      final attempts = int.tryParse(normalized) ?? 3;
+      // crude mapping of strategy names to backoff; can be refined
+      final backoff = normalized.contains('exponential')
+          ? 2000
+          : normalized.contains('linear')
+              ? 1000
+              : 1000;
+      return RetryPolicyConfig(maxAttempts: attempts, backoffMs: backoff);
+    }
+    return RetryPolicyConfig(maxAttempts: 3, backoffMs: 1000);
   }
 }
 
@@ -429,20 +585,34 @@ class BottomNavigationItemConfig {
   final String title;
   final String icon;
   final String? badge;
+  final String? route;
 
   BottomNavigationItemConfig({
     required this.pageId,
     required this.title,
     required this.icon,
     this.badge,
+    this.route,
   });
 
-  factory BottomNavigationItemConfig.fromJson(Map<String, dynamic> json) {
+  factory BottomNavigationItemConfig.fromJson(dynamic json) {
+    if (json is String) {
+      return BottomNavigationItemConfig(
+        pageId: json,
+        title: json,
+        icon: '',
+        route: null,
+      );
+    }
+    final map = json as Map<String, dynamic>? ?? <String, dynamic>{};
+    final String? route = map['route']?.toString();
+    final String title = (map['title'] ?? map['label'] ?? '').toString();
     return BottomNavigationItemConfig(
-      pageId: json['pageId'] ?? '',
-      title: json['title'] ?? '',
-      icon: json['icon'] ?? '',
-      badge: json['badge'],
+      pageId: (map['pageId'] ?? '').toString(),
+      title: title,
+      icon: map['icon'] ?? '',
+      badge: map['badge'],
+      route: route,
     );
   }
 }
@@ -460,12 +630,16 @@ class RouteConfig {
     this.params,
   });
 
-  factory RouteConfig.fromJson(Map<String, dynamic> json) {
+  factory RouteConfig.fromJson(dynamic json) {
+    if (json is String) {
+      return RouteConfig(pageId: json);
+    }
+    final map = json as Map<String, dynamic>? ?? <String, dynamic>{};
     return RouteConfig(
-      pageId: json['pageId'] ?? '',
-      auth: json['auth'],
-      redirectIfAuth: json['redirectIfAuth'],
-      params: json['params'] != null ? List<String>.from(json['params']) : null,
+      pageId: map['pageId'] ?? '',
+      auth: map['auth'],
+      redirectIfAuth: map['redirectIfAuth'],
+      params: map['params'] != null ? List<String>.from(map['params']) : null,
     );
   }
 }
@@ -488,20 +662,33 @@ class EnhancedPageConfig {
     this.style,
   });
 
-  factory EnhancedPageConfig.fromJson(Map<String, dynamic> json) {
+  factory EnhancedPageConfig.fromJson(dynamic json) {
+    // Accept strings or primitives for minimal pages
+    if (json is String || json is num || json is bool) {
+      final id = json.toString();
+      return EnhancedPageConfig(
+        id: id,
+        title: id,
+        layout: 'column',
+        navigationBar: null,
+        children: const [],
+        style: null,
+      );
+    }
+
+    final Map<String, dynamic> map =
+        json is Map<String, dynamic> ? json : <String, dynamic>{};
     return EnhancedPageConfig(
-      id: json['id'] ?? '',
-      title: json['title'] ?? '',
-      layout: json['layout'] ?? 'column',
-      navigationBar:
-          json['navigationBar'] != null
-              ? EnhancedNavigationBarConfig.fromJson(json['navigationBar'])
-              : null,
-      children:
-          (json['children'] as List? ?? [])
-              .map((child) => EnhancedComponentConfig.fromJson(child))
-              .toList(),
-      style: json['style'] != null ? StyleConfig.fromJson(json['style']) : null,
+      id: map['id']?.toString() ?? '',
+      title: map['title']?.toString() ?? '',
+      layout: map['layout']?.toString() ?? 'column',
+      navigationBar: map['navigationBar'] != null
+          ? EnhancedNavigationBarConfig.fromJson(map['navigationBar'])
+          : null,
+      children: (map['children'] as List? ?? [])
+          .map((child) => EnhancedComponentConfig.fromJson(child))
+          .toList(),
+      style: map['style'] != null ? StyleConfig.fromJson(map['style']) : null,
     );
   }
 }
@@ -545,6 +732,17 @@ class EnhancedComponentConfig {
   final String? overflow;
   final bool? obscureText;
   final String? keyboardType;
+  // Layout and variant extensions
+  final String? variant; // for card variants: filled|outlined|elevated
+  final String? clipBehavior; // e.g., antiAlias
+  final double? minWidth;
+  final double? maxWidth;
+  final double? minHeight;
+  final double? maxHeight;
+  final String? alignment; // for single-child align wrappers
+  final double? aspectRatio; // for aspect ratio container
+  final String? fit; // cover|contain|fill
+  final String? sizeToken; // spacer: small|medium|large|custom
   final List<String>? permissions;
   final List<EnhancedComponentConfig>? children;
   final EnhancedDataSourceConfig? dataSource;
@@ -580,6 +778,16 @@ class EnhancedComponentConfig {
     this.overflow,
     this.obscureText,
     this.keyboardType,
+    this.variant,
+    this.clipBehavior,
+    this.minWidth,
+    this.maxWidth,
+    this.minHeight,
+    this.maxHeight,
+    this.alignment,
+    this.aspectRatio,
+    this.fit,
+    this.sizeToken,
     this.permissions,
     this.children,
     this.dataSource,
@@ -599,75 +807,92 @@ class EnhancedComponentConfig {
     this.enabled,
   });
 
-  factory EnhancedComponentConfig.fromJson(Map<String, dynamic> json) {
-    return EnhancedComponentConfig(
-      type: json['type'] ?? '',
-      id: json['id'],
-      text: json['text'],
-      src: json['src'] ?? json['text'],
-      binding: json['binding'],
-      label: json['label'],
-      placeholder: json['placeholder'],
-      icon: json['icon'],
-      name: json['name'],
-      size: json['size'],
-      columns: json['columns'],
-      flex: json['flex'],
-      maxLines: json['maxLines'],
-      overflow: json['overflow'],
-      obscureText: json['obscureText'],
-      keyboardType: json['keyboardType'],
-      permissions:
-          json['permissions'] != null
-              ? List<String>.from(json['permissions'])
-              : null,
-      children:
-          json['children'] != null
-              ? (json['children'] as List)
-                  .map((child) => EnhancedComponentConfig.fromJson(child))
-                  .toList()
-              : null,
-      dataSource:
-          json['dataSource'] != null
-              ? EnhancedDataSourceConfig.fromJson(json['dataSource'])
-              : null,
-      itemBuilder:
-          json['itemBuilder'] != null
-              ? EnhancedComponentConfig.fromJson(json['itemBuilder'])
-              : null,
-      emptyState:
-          json['emptyState'] != null
-              ? EnhancedComponentConfig.fromJson(json['emptyState'])
-              : null,
-      loadingState:
-          json['loadingState'] != null
-              ? EnhancedComponentConfig.fromJson(json['loadingState'])
-              : null,
-      errorState:
-          json['errorState'] != null
-              ? EnhancedComponentConfig.fromJson(json['errorState'])
-              : null,
-      validation:
-          json['validation'] != null
-              ? ValidationConfig.fromJson(json['validation'])
-              : null,
-      style: json['style'] != null ? StyleConfig.fromJson(json['style']) : null,
-      onTap:
-          json['onTap'] != null ? ActionConfig.fromJson(json['onTap']) : null,
-      onChanged:
-          json['onChanged'] != null
-              ? ActionConfig.fromJson(json['onChanged'])
-              : null,
-      onSubmit:
-          json['onSubmit'] != null
-              ? ActionConfig.fromJson(json['onSubmit'])
-              : null,
-      mainAxisAlignment: json['mainAxisAlignment'],
-      crossAxisAlignment: json['crossAxisAlignment'],
-      spacing: ParsingUtils.safeToDouble(json['spacing']),
-      boundData: json['boundData'],
-      enabled: json['enabled'] ?? true,
-    );
+  factory EnhancedComponentConfig.fromJson(dynamic json) {
+    // Accept strings or numbers as shorthand text components
+    if (json is String || json is num || json is bool) {
+      final textVal = json.toString();
+      return EnhancedComponentConfig(
+        type: 'text',
+        text: textVal,
+        enabled: true,
+      );
+    }
+
+    // Default to empty map if null
+    final Map<String, dynamic> map =
+        json is Map<String, dynamic> ? json : <String, dynamic>{};
+
+  return EnhancedComponentConfig(
+    type: map['type'] ?? '',
+    id: map['id'],
+    text: map['text'],
+    src: map['src'] ?? map['text'],
+    binding: map['binding'],
+    label: map['label'],
+    placeholder: map['placeholder'],
+    icon: map['icon'],
+    name: map['name'],
+    size: ParsingUtils.safeToInt(map['size']),
+    columns: ParsingUtils.safeToInt(map['columns']),
+    flex: ParsingUtils.safeToInt(map['flex']),
+    maxLines: ParsingUtils.safeToInt(map['maxLines']),
+    overflow: map['overflow'],
+    obscureText: map['obscureText'],
+    keyboardType: map['keyboardType'],
+    variant: map['variant']?.toString(),
+    clipBehavior: map['clipBehavior']?.toString(),
+    minWidth: ParsingUtils.safeToDouble(map['minWidth']),
+    maxWidth: ParsingUtils.safeToDouble(map['maxWidth']),
+    minHeight: ParsingUtils.safeToDouble(map['minHeight']),
+    maxHeight: ParsingUtils.safeToDouble(map['maxHeight']),
+    alignment: map['alignment']?.toString(),
+    aspectRatio: ParsingUtils.safeToDouble(map['ratio']) ??
+        ParsingUtils.safeToDouble(map['aspectRatio']),
+    fit: map['fit']?.toString(),
+    sizeToken: map['size'] is String ? map['size'] as String : null,
+    permissions:
+        map['permissions'] != null
+            ? List<String>.from(map['permissions'])
+            : null,
+    children: map['children'] != null
+        ? (map['children'] as List)
+            .map((child) => EnhancedComponentConfig.fromJson(child))
+            .toList()
+        : null,
+    dataSource: map['dataSource'] != null
+        ? EnhancedDataSourceConfig.fromJson(map['dataSource'])
+        : null,
+    itemBuilder: map['itemBuilder'] != null
+        ? EnhancedComponentConfig.fromJson(map['itemBuilder'])
+        : null,
+    emptyState: map['emptyState'] != null
+        ? EnhancedComponentConfig.fromJson(map['emptyState'])
+        : null,
+    loadingState: map['loadingState'] != null
+        ? EnhancedComponentConfig.fromJson(map['loadingState'])
+        : null,
+    errorState: map['errorState'] != null
+        ? EnhancedComponentConfig.fromJson(map['errorState'])
+        : null,
+    validation:
+        map['validation'] != null
+            ? ValidationConfig.fromJson(map['validation'])
+            : null,
+    style: map['style'] != null ? StyleConfig.fromJson(map['style']) : null,
+    onTap:
+        map['onTap'] != null
+            ? ActionConfig.fromJson(map['onTap'])
+            : (map['action'] != null ? ActionConfig.fromJson(map['action']) : null),
+    onChanged:
+        map['onChanged'] != null ? ActionConfig.fromJson(map['onChanged']) : null,
+    onSubmit:
+        map['onSubmit'] != null ? ActionConfig.fromJson(map['onSubmit']) : null,
+    mainAxisAlignment: map['mainAxisAlignment'],
+    crossAxisAlignment: map['crossAxisAlignment'],
+    spacing: ParsingUtils.safeToDouble(map['spacing']),
+    boundData: map['boundData'],
+    enabled: map['enabled'] ?? true,
+  );
   }
 
   EnhancedComponentConfig copyWith({
@@ -678,6 +903,16 @@ class EnhancedComponentConfig {
     String? binding,
     Map<String, dynamic>? boundData,
     bool? enabled,
+    String? variant,
+    String? clipBehavior,
+    double? minWidth,
+    double? maxWidth,
+    double? minHeight,
+    double? maxHeight,
+    String? alignment,
+    double? aspectRatio,
+    String? fit,
+    String? sizeToken,
   }) {
     return EnhancedComponentConfig(
       type: type ?? this.type,
@@ -696,6 +931,16 @@ class EnhancedComponentConfig {
       overflow: overflow,
       obscureText: obscureText,
       keyboardType: keyboardType,
+      variant: variant ?? this.variant,
+      clipBehavior: clipBehavior ?? this.clipBehavior,
+      minWidth: minWidth ?? this.minWidth,
+      maxWidth: maxWidth ?? this.maxWidth,
+      minHeight: minHeight ?? this.minHeight,
+      maxHeight: maxHeight ?? this.maxHeight,
+      alignment: alignment ?? this.alignment,
+      aspectRatio: aspectRatio ?? this.aspectRatio,
+      fit: fit ?? this.fit,
+      sizeToken: sizeToken ?? this.sizeToken,
       permissions: permissions,
       children: children,
       dataSource: dataSource,
@@ -719,24 +964,31 @@ class EnhancedComponentConfig {
 
 /// Enhanced data source with advanced features
 class EnhancedDataSourceConfig {
+  final String? type; // 'api' | 'static'
   final String? service;
   final String? endpoint;
   final Map<String, dynamic>? params;
   final String? listPath;
   final EnhancedPaginationConfig? pagination;
   final bool? virtualScrolling;
+  final List<dynamic>? items; // for static data source
 
   EnhancedDataSourceConfig({
+    this.type,
     this.service,
     this.endpoint,
     this.params,
     this.listPath,
     this.pagination,
     this.virtualScrolling,
+    this.items,
   });
 
   factory EnhancedDataSourceConfig.fromJson(Map<String, dynamic> json) {
+    // Support both `items` and legacy alias `data` for static lists
+    final dynamic rawItems = json.containsKey('items') ? json['items'] : json['data'];
     return EnhancedDataSourceConfig(
+      type: json['type'],
       service: json['service'],
       endpoint: json['endpoint'],
       params: json['params'],
@@ -746,6 +998,7 @@ class EnhancedDataSourceConfig {
               ? EnhancedPaginationConfig.fromJson(json['pagination'])
               : null,
       virtualScrolling: json['virtualScrolling'],
+      items: rawItems is List ? List<dynamic>.from(rawItems) : null,
     );
   }
 }
@@ -786,8 +1039,15 @@ class StyleConfig {
   final double? maxWidth;
   final double? borderRadius;
   final double? elevation;
+  final String? borderColor;
+  final double? borderWidth;
   final EdgeInsetsConfig? padding;
   final EdgeInsetsConfig? margin;
+  /// Optional style token name (e.g., a typography preset like "largeTitle").
+  /// When provided, factories can resolve this token against contract typography
+  /// and merge its values with explicit overrides in this StyleConfig.
+  final String? use;
+  final GradientConfig? gradient;
 
   StyleConfig({
     this.fontSize,
@@ -801,32 +1061,70 @@ class StyleConfig {
     this.maxWidth,
     this.borderRadius,
     this.elevation,
+    this.borderColor,
+    this.borderWidth,
     this.padding,
     this.margin,
+    this.use,
+    this.gradient,
   });
 
-  factory StyleConfig.fromJson(Map<String, dynamic> json) {
-    return StyleConfig(
-      fontSize: ParsingUtils.safeToDouble(json['fontSize']),
-      fontWeight: json['fontWeight'],
-      color: json['color'],
-      backgroundColor: json['backgroundColor'],
-      foregroundColor: json['foregroundColor'],
-      textAlign: json['textAlign'],
-      width: ParsingUtils.safeToDouble(json['width']),
-      height: ParsingUtils.safeToDouble(json['height']),
-      maxWidth: ParsingUtils.safeToDouble(json['maxWidth']),
-      borderRadius: ParsingUtils.safeToDouble(json['borderRadius']),
-      elevation: ParsingUtils.safeToDouble(json['elevation']),
-      padding:
-          json['padding'] != null
-              ? EdgeInsetsConfig.fromJson(json['padding'])
-              : null,
-      margin:
-          json['margin'] != null
-              ? EdgeInsetsConfig.fromJson(json['margin'])
-              : null,
-    );
+  /// Accepts either a map of style properties or a string token name.
+  /// If a string is provided, it is stored in `use` and other fields remain null.
+  factory StyleConfig.fromJson(dynamic json) {
+    if (json is String) {
+      // Style provided as a token name; resolution happens in the factory.
+      return StyleConfig(use: json);
+    }
+    if (json is Map<String, dynamic>) {
+      return StyleConfig(
+        fontSize: ParsingUtils.safeToDouble(json['fontSize']),
+        fontWeight: json['fontWeight'],
+        color: json['color'],
+        backgroundColor: json['backgroundColor'],
+        foregroundColor: json['foregroundColor'],
+        textAlign: json['textAlign'],
+        width: ParsingUtils.safeToDouble(json['width']),
+        height: ParsingUtils.safeToDouble(json['height']),
+        maxWidth: ParsingUtils.safeToDouble(json['maxWidth']),
+        borderRadius: ParsingUtils.safeToDouble(json['borderRadius']),
+        elevation: ParsingUtils.safeToDouble(json['elevation']),
+        borderColor: json['borderColor'],
+        borderWidth: ParsingUtils.safeToDouble(json['borderWidth']),
+        padding:
+            json['padding'] != null
+                ? EdgeInsetsConfig.fromJson(json['padding'])
+                : null,
+        margin:
+            json['margin'] != null
+                ? EdgeInsetsConfig.fromJson(json['margin'])
+                : null,
+        use: json['use']?.toString(),
+        gradient:
+            json['gradient'] != null
+                ? GradientConfig.fromJson(json['gradient'])
+                : null,
+      );
+    }
+    // Fallback: unsupported type
+    return StyleConfig();
+  }
+}
+
+class GradientConfig {
+  final String? startColor;
+  final String? endColor;
+
+  GradientConfig({this.startColor, this.endColor});
+
+  factory GradientConfig.fromJson(dynamic json) {
+    if (json is Map<String, dynamic>) {
+      return GradientConfig(
+        startColor: json['startColor']?.toString(),
+        endColor: json['endColor']?.toString(),
+      );
+    }
+    return GradientConfig();
   }
 }
 

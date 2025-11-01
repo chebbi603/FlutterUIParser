@@ -170,6 +170,38 @@ This framework implements a production-grade, JSON-driven application architectu
 }
 ```
 
+#### Service Name Aliasing (new)
+- The contract parser normalizes service names to create convenient aliases.
+- Any service key that ends with `Service` or `Api` gains a lowercase alias with the suffix removed.
+- The original key is preserved; explicit aliases in the contract are never overridden.
+- Examples:
+  - `AuthService` -> alias `auth`
+  - `UserApi` -> alias `user`
+  - `CatalogService` -> alias `catalog`
+
+Example input and resulting access:
+```json
+{
+  "services": [
+    {
+      "name": "AuthService",
+      "baseUrl": "${API_BASE_URL}/auth",
+      "endpoints": [ { "name": "login", "path": "/login", "method": "POST" } ]
+    }
+  ]
+}
+```
+
+- During parsing, both keys are available: `"AuthService"` and `"auth"`.
+- In Flutter, you may reference either name. The alias keeps code concise:
+  - `contract.services['auth']`
+  - `contract.services['AuthService']`
+
+Notes:
+- Aliasing only applies to keys that literally end with `Service` or `Api`.
+- If the normalized alias already exists in the input, the explicit mapping is kept as‑is.
+- This behavior improves interoperability with backends that prefer verbose names while enabling succinct frontend usage.
+
 ### UI Pages
 ```json
 {
@@ -203,6 +235,26 @@ This framework implements a production-grade, JSON-driven application architectu
         ]
       }
     }
+  }
+}
+```
+
+### Bottom Navigation Enhancements
+- Items support either `pageId` or `route` to resolve the tab’s page.
+  - If `route` is provided, it maps directly via `NavigationBridge.switchTo(route)`.
+  - If only `pageId` is provided, the app infers the route from `pagesUI.routes` where `routeConfig.pageId == item.pageId`.
+- Items accept `title` or `label` for the displayed tab text.
+- `initialIndex` selects the starting tab; `style` allows color customization via tokens or raw values.
+- Example:
+```json
+{
+  "bottomNavigation": {
+    "enabled": true,
+    "initialIndex": 0,
+    "items": [
+      { "route": "/home", "label": "Home", "icon": "house" },
+      { "pageId": "courses", "title": "Courses", "icon": "doc_text" }
+    ]
   }
 }
 ```
