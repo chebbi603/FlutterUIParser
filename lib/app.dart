@@ -1,12 +1,10 @@
-import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'models/config_models.dart';
-// import 'validation/contract_validator.dart';
-import 'widgets/component_factory.dart';
 import 'widgets/enhanced_page_builder.dart';
 import 'state/state_manager.dart';
 import 'services/api_service.dart';
@@ -15,11 +13,17 @@ import 'services/auth_service.dart';
 import 'permissions/permission_manager.dart';
 import 'navigation/navigation_bridge.dart';
 import 'utils/parsing_utils.dart';
-
+import 'widgets/component_factory.dart';
+import 'providers/contract_provider.dart';
 import 'analytics/services/analytics_service.dart';
+import 'analytics/models/tracking_event.dart';
+
+// Note: AnalyticsService configuration is done in main.dart from the loaded contract.
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+  const MyApp({super.key, required this.initialContractMap});
+
+  final Map<String, dynamic> initialContractMap;
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -47,67 +51,71 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    _loadContract();
+    _bootstrapFromInitialMap();
+    // Attach provider listener after first frame when provider is available
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _attachProviderListener();
+    });
   }
 
-  Future<void> _loadContract() async {
+  Future<void> _bootstrapFromInitialMap() async {
     try {
-      // 1) Try backend canonical first (default public contract)
-      CanonicalContract? initial;
-      final envBase = (dotenv.isInitialized ? dotenv.env['API_BASE_URL'] : null)?.trim();
-      if (envBase != null && envBase.isNotEmpty) {
-        initial = await _contractLoader.fetchCanonicalFromApi(baseUrl: envBase);
-        if (initial != null) {
-          await _initializeWithContract(initial, initState: true);
-          setState(() {
-            contract = initial;
-            isLoading = false;
-            errorMessage = null;
-            errorDetails = null;
-          });
-          _currentVersion = initial.meta.version;
-        }
-      }
-
-      // 2) If backend canonical not available, try cache for instant UI
-      if (initial == null) {
-        final cached = await _contractLoader.loadFromCache();
-        if (cached != null) {
-          await _initializeWithContract(cached.contract, initState: true);
-          setState(() {
-            contract = cached.contract;
-            isLoading = false;
-            errorMessage = null;
-            errorDetails = null;
-          });
-          _currentVersion = cached.version ?? cached.contract.meta.version;
-        } else {
-          // 3) Fallback to bundled canonical asset
-          final assetContract = await _contractLoader.loadFromAssets();
-          await _initializeWithContract(assetContract, initState: true);
-          setState(() {
-            contract = assetContract;
-            isLoading = false;
-            errorMessage = null;
-            errorDetails = null;
-          });
-          _currentVersion = assetContract.meta.version;
-        }
-      }
+      final parsed = CanonicalContract.fromJson(widget.initialContractMap);
+      await _initializeWithContract(parsed, initState: true);
+      setState(() {
+        contract = parsed;
+        isLoading = false;
+        errorMessage = null;
+        errorDetails = null;
+      });
+      _currentVersion = parsed.meta.version;
 
       // Observe auth changes to fetch user-specific contract post-login
       stateManager.addListener(_onStateChanged);
 
       // Attempt API refresh immediately if already authenticated (user-specific)
+      // This can update the UI with a user-specific contract when available.
       unawaited(_attemptApiRefresh());
     } catch (e, st) {
       final lines = st.toString().split('\n').take(12).toList();
       setState(() {
         isLoading = false;
-        errorMessage = 'Error bootstrapping contract: $e';
+        errorMessage = 'Error initializing contract: $e';
         errorDetails = lines;
       });
-      debugPrint('Error bootstrapping contract: $e');
+      debugPrint('Error initializing contract: $e');
+    }
+  }
+
+  void _attachProviderListener() {
+    if (!mounted) return;
+    try {
+      final provider = Provider.of<ContractProvider>(context, listen: false);
+      provider.addListener(_onProviderChanged);
+    } catch (_) {
+      // Provider not found yet; will try again on next frame
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _attachProviderListener();
+        }
+      });
+    }
+  }
+
+  void _onProviderChanged() {
+    if (!mounted) return;
+    final provider = Provider.of<ContractProvider>(context, listen: false);
+    // Show refresh error if any
+    final err = provider.error;
+    if (err != null && err.isNotEmpty) {
+      _showToast('Refresh failed: $err');
+    }
+    final updated = provider.contract;
+    if (updated != null) {
+      final newVersion = updated.meta.version;
+      if (_currentVersion == null || newVersion != _currentVersion) {
+        unawaited(_applyUpdatedContract(updated));
+      }
     }
   }
 
@@ -127,22 +135,8 @@ class _MyAppState extends State<MyApp> {
       apiService.setAuthToken(persistedAccess);
     }
 
-    // Configure analytics with env override
-    final envBackend = (dotenv.isInitialized ? dotenv.env['ANALYTICS_BACKEND_URL'] : null)?.trim();
-    final mockEnv = dotenv.isInitialized ? dotenv.env['ANALYTICS_MOCK_MODE'] : null;
-    final mockMode = ((mockEnv ?? 'false').toLowerCase() == 'true');
-    final configuredBackend = (envBackend != null && envBackend.isNotEmpty)
-        ? envBackend
-        : loadedContract.analytics?.backendUrl;
-    final batchSize = int.tryParse(((dotenv.isInitialized ? dotenv.env['ANALYTICS_BATCH_SIZE'] : null) ?? '').trim());
-    final flushInterval = int.tryParse(((dotenv.isInitialized ? dotenv.env['ANALYTICS_FLUSH_INTERVAL_MS'] : null) ?? '').trim());
-    final wsUrl = (dotenv.isInitialized ? dotenv.env['WS_URL'] : null)?.trim();
-    AnalyticsService().configure(
-      backendUrl: configuredBackend,
-      wsUrl: wsUrl,
-      batchSize: batchSize,
-      flushIntervalMs: flushInterval,
-    );
+    // Set tracked component ids for analytics widgets; actual AnalyticsService
+    // configuration happens in main.dart to avoid duplication.
     _trackedIds = loadedContract.analytics?.trackedComponents.toSet() ?? {};
 
     // Execute app start events (simplified logging)
@@ -265,7 +259,13 @@ class _MyAppState extends State<MyApp> {
                 children: [
                   const Icon(CupertinoIcons.info, color: CupertinoColors.white, size: 18),
                   const SizedBox(width: 8),
-                  Flexible(child: Text(message)),
+                  Flexible(
+                    child: Text(
+                      message,
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 2,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -284,34 +284,32 @@ class _MyAppState extends State<MyApp> {
     if (!mounted || _pendingUpdate == null) return;
     showCupertinoDialog(
       context: context,
-      builder: (ctx) {
-        return CupertinoAlertDialog(
-          title: const Text('New UI available'),
-          content: const Text('A newer version of the app contract is available.'),
-          actions: [
-            CupertinoDialogAction(
-              isDefaultAction: true,
-              onPressed: () async {
-                final toApply = _pendingUpdate;
-                _pendingUpdate = null;
-                Navigator.of(ctx, rootNavigator: true).pop();
-                if (toApply != null) {
-                  await _applyUpdatedContract(toApply);
-                }
-              },
-              child: const Text('Reload Now'),
-            ),
-            CupertinoDialogAction(
-              isDestructiveAction: false,
-              onPressed: () {
-                Navigator.of(ctx, rootNavigator: true).pop();
-                _showToast('Update available. You can reload later.');
-              },
-              child: const Text('Later'),
-            ),
-          ],
-        );
-      },
+      builder: (ctx) => CupertinoAlertDialog(
+        title: const Text('Update Available'),
+        content: const Text('A newer UI contract is available. Reload now?'),
+        actions: [
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () async {
+              Navigator.of(ctx, rootNavigator: true).pop();
+              final next = _pendingUpdate;
+              _pendingUpdate = null;
+              if (next != null) {
+                await _applyUpdatedContract(next);
+              }
+            },
+            child: const Text('Reload'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: false,
+            onPressed: () {
+              Navigator.of(ctx, rootNavigator: true).pop();
+              // Keep pending update; user can reload later via background polling
+            },
+            child: const Text('Later'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -326,11 +324,11 @@ class _MyAppState extends State<MyApp> {
       );
     }
 
-  if (errorMessage != null) {
-    return CupertinoApp(
-      home: CupertinoPageScaffold(
-        child: Center(
-          child: Column(
+    if (errorMessage != null) {
+      return CupertinoApp(
+        home: CupertinoPageScaffold(
+          child: Center(
+            child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const Icon(
@@ -339,9 +337,9 @@ class _MyAppState extends State<MyApp> {
                   color: CupertinoColors.destructiveRed,
                 ),
                 const SizedBox(height: 16),
-                Text(
+                const Text(
                   'Failed to Load App',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
@@ -356,42 +354,6 @@ class _MyAppState extends State<MyApp> {
                       color: CupertinoColors.secondaryLabel,
                     ),
                   ),
-                ),
-                if (errorDetails != null && errorDetails!.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: SizedBox(
-                      height: 200,
-                      child: ListView.builder(
-                        itemCount: errorDetails!.length,
-                        itemBuilder: (_, index) {
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4),
-                            child: Text(
-                              '• ${errorDetails![index]}',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: CupertinoColors.secondaryLabel,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 24),
-                CupertinoButton(
-                  onPressed: () {
-                    setState(() {
-                      isLoading = true;
-                      errorMessage = null;
-                      errorDetails = null;
-                    });
-                    _loadContract();
-                  },
-                  child: const Text('Retry'),
                 ),
               ],
             ),
@@ -423,32 +385,27 @@ class _MyAppState extends State<MyApp> {
   }
 
   CupertinoThemeData _buildTheme() {
-    // For now, use default Cupertino theme
-    // In a full implementation, you'd use the theme tokens from the contract
     return const CupertinoThemeData(brightness: Brightness.light);
   }
 
   Widget _buildHome() {
     final pagesUI = contract!.pagesUI;
 
-    // Check if bottom navigation is enabled
     if (pagesUI.bottomNavigation?.enabled == true) {
       return _buildTabbedHome();
     }
 
-    // Find home route
     final homeRoute = pagesUI.routes['/'];
     if (homeRoute != null) {
       final page = pagesUI.pages[homeRoute.pageId];
       if (page != null) {
-        return EnhancedPageBuilder(config: page, trackedIds: _trackedIds);
+        return _wrapWithRefresh(EnhancedPageBuilder(config: page, trackedIds: _trackedIds));
       }
     }
 
-    // Fallback to first page
     if (pagesUI.pages.isNotEmpty) {
       final firstPage = pagesUI.pages.values.first;
-      return EnhancedPageBuilder(config: firstPage, trackedIds: _trackedIds);
+      return _wrapWithRefresh(EnhancedPageBuilder(config: firstPage, trackedIds: _trackedIds));
     }
 
     return const CupertinoPageScaffold(
@@ -463,14 +420,11 @@ class _MyAppState extends State<MyApp> {
       initialIndex: bottomNav.initialIndex,
     );
 
-    // Resolve tab pages
-    final tabPages =
-        bottomNav.items.map((item) {
-          final page = pages[item.pageId];
-          return page ?? pages.values.first;
-        }).toList();
+    final tabPages = bottomNav.items.map((item) {
+      final page = pages[item.pageId];
+      return page ?? pages.values.first;
+    }).toList();
 
-    // Map routes to tab indices for quick switching
     final Map<String, int> routeToIndex = {};
     for (var i = 0; i < bottomNav.items.length; i++) {
       final item = bottomNav.items[i];
@@ -481,7 +435,6 @@ class _MyAppState extends State<MyApp> {
       });
     }
 
-    // Expose controller and route map via bridge
     NavigationBridge.tabController = _tabController;
     NavigationBridge.routeToIndex = routeToIndex;
 
@@ -489,28 +442,21 @@ class _MyAppState extends State<MyApp> {
       controller: _tabController,
       tabBar: CupertinoTabBar(
         currentIndex: bottomNav.initialIndex,
-        backgroundColor:
-            _parseColor(bottomNav.style?.backgroundColor) ??
-            CupertinoColors.systemBackground,
-        activeColor:
-            _parseColor(bottomNav.style?.foregroundColor) ??
-            CupertinoColors.activeBlue,
-        inactiveColor:
-            _parseColor(bottomNav.style?.color) ?? CupertinoColors.inactiveGray,
-        items:
-            bottomNav.items.map((item) {
-              // Resolve icon via contract mapping or fallback
-              final mapped = contract!.assets.icons[item.icon];
-              final iconData = ParsingUtils.parseIcon(mapped ?? item.icon);
-              return BottomNavigationBarItem(
-                icon: Icon(iconData),
-                label: item.title,
-              );
-            }).toList(),
+        backgroundColor: _parseColor(bottomNav.style?.backgroundColor) ?? CupertinoColors.systemBackground,
+        activeColor: _parseColor(bottomNav.style?.foregroundColor) ?? CupertinoColors.activeBlue,
+        inactiveColor: _parseColor(bottomNav.style?.color) ?? CupertinoColors.inactiveGray,
+        items: bottomNav.items.map((item) {
+          final mapped = contract!.assets.icons[item.icon];
+          final iconData = ParsingUtils.parseIcon(mapped ?? item.icon);
+          return BottomNavigationBarItem(
+            icon: Icon(iconData),
+            label: item.title,
+          );
+        }).toList(),
       ),
       tabBuilder: (context, index) {
         return CupertinoTabView(
-          builder: (_) => EnhancedPageBuilder(config: tabPages[index], trackedIds: _trackedIds),
+          builder: (_) => _wrapWithRefresh(EnhancedPageBuilder(config: tabPages[index], trackedIds: _trackedIds)),
           onGenerateRoute: _generateRoute,
         );
       },
@@ -519,23 +465,19 @@ class _MyAppState extends State<MyApp> {
 
   Route<dynamic>? _generateRoute(RouteSettings settings) {
     final routeName = settings.name ?? '/';
-
     final routeConfig = contract!.pagesUI.routes[routeName];
 
     if (routeConfig == null) {
       return CupertinoPageRoute(
-        builder:
-            (_) => const CupertinoPageScaffold(
-              child: Center(child: Text('Page not found')),
-            ),
+        builder: (_) => const CupertinoPageScaffold(
+          child: Center(child: Text('Page not found')),
+        ),
       );
     }
 
-    // Check authentication
     if (routeConfig.auth == true) {
       final authToken = stateManager.getGlobalState<String>('authToken');
       if (authToken == null || authToken.isEmpty) {
-        // Redirect to login page if configured
         final loginRoute = contract!.pagesUI.routes['/login'];
         if (loginRoute != null) {
           final page = contract!.pagesUI.pages[loginRoute.pageId];
@@ -546,10 +488,9 @@ class _MyAppState extends State<MyApp> {
           }
         }
         return CupertinoPageRoute(
-          builder:
-              (_) => const CupertinoPageScaffold(
-                child: Center(child: Text('Please log in')),
-              ),
+          builder: (_) => const CupertinoPageScaffold(
+            child: Center(child: Text('Please log in')),
+          ),
         );
       }
     }
@@ -557,10 +498,9 @@ class _MyAppState extends State<MyApp> {
     final page = contract!.pagesUI.pages[routeConfig.pageId];
     if (page == null) {
       return CupertinoPageRoute(
-        builder:
-            (_) => const CupertinoPageScaffold(
-              child: Center(child: Text('Page configuration not found')),
-            ),
+        builder: (_) => const CupertinoPageScaffold(
+          child: Center(child: Text('Page configuration not found')),
+        ),
       );
     }
 
@@ -570,10 +510,105 @@ class _MyAppState extends State<MyApp> {
     );
   }
 
+  Widget _wrapWithRefresh(Widget child) {
+    final provider = Provider.of<ContractProvider>(context);
+    final hasError = provider.error != null;
+    final errorBanner = hasError
+        ? Container(
+            color: CupertinoColors.destructiveRed.withOpacity(0.1),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              children: [
+                const Icon(CupertinoIcons.exclamationmark_triangle, color: CupertinoColors.destructiveRed, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    provider.error!,
+                    style: const TextStyle(color: CupertinoColors.destructiveRed, fontSize: 13),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 2,
+                  ),
+                ),
+                CupertinoButton(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  onPressed: provider.loading ? null : () => provider.refresh(),
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          )
+        : const SizedBox.shrink();
+
+    // Optional banner to indicate refresh disabled (e.g., offline or no backend URL)
+    final refreshDisabledBanner = (!provider.canRefresh)
+        ? Container(
+            color: CupertinoColors.systemGrey6,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              children: const [
+                Icon(CupertinoIcons.wifi_exclamationmark, color: CupertinoColors.inactiveGray, size: 18),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Pull-to-refresh unavailable (offline or no backend configured).',
+                    style: TextStyle(color: CupertinoColors.secondaryLabel, fontSize: 13),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 2,
+                  ),
+                ),
+              ],
+            ),
+          )
+        : const SizedBox.shrink();
+
+    // Debug-only analytics test trigger
+    final devAnalyticsButton = kDebugMode
+        ? Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: CupertinoButton(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              color: CupertinoColors.activeBlue,
+              onPressed: () async {
+                final svc = AnalyticsService();
+                await svc.trackComponentInteraction(
+                  componentId: 'test-button',
+                  componentType: 'debug',
+                  eventType: TrackingEventType.custom,
+                  data: const {'tag': 'test'},
+                );
+                await svc.flush();
+                // ignore: avoid_print
+                print('Dev analytics: test event sent and flush requested');
+              },
+              child: const Text('Send Test Analytics'),
+            ),
+          )
+        : const SizedBox.shrink();
+
+    return CustomScrollView(
+      slivers: [
+        CupertinoSliverRefreshControl(
+          onRefresh: provider.canRefresh
+              ? () => Provider.of<ContractProvider>(context, listen: false).refresh()
+              : null,
+        ),
+        SliverToBoxAdapter(
+          child: Column(
+            children: [
+              errorBanner,
+              refreshDisabledBanner,
+              devAnalyticsButton,
+              child,
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Color? _parseColor(String? colorString) {
     if (colorString == null) return null;
 
-    // Handle theme tokens
     if (colorString.startsWith('\${theme.') && colorString.endsWith('}')) {
       final tokenName = colorString.substring(8, colorString.length - 1);
       final themeMode = stateManager.getGlobalState<String>('theme') ?? 'light';

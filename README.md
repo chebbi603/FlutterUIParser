@@ -101,6 +101,8 @@ Edit `assets/canonical_contract.json` to see real-time changes in the app.
 - **[Canonical Framework Guide](docs/flutter-canonical_framework_guide.md)**: Comprehensive documentation
 - **[System Overview](docs/flutter-system_overview.md)**: Original system documentation
 - **[Contract Validator Usage](docs/contract_validator_usage.md)**: How to validate contracts and use the CLI
+- **[Contract Refresh Mechanism](docs/contract_refresh_mechanism.md)**: Provider-based pull-to-refresh and runtime updates
+- **[Analytics Backend Configuration](docs/analytics_backend_configuration.md)**: Configure analytics via contract and verify flush in debug
 
 ## 🔌 Backend Integration
 
@@ -112,6 +114,31 @@ Edit `assets/canonical_contract.json` to see real-time changes in the app.
 - Emulator run (iOS):
   - Launch the iOS Simulator (`open -a Simulator`) and run `flutter run`.
   - Ensure your backend is running on `8081` to serve the canonical contract.
+
+### Environment Variables and Startup
+
+- The app reads the backend base URL from the compile-time define `API_URL` in `lib/main.dart`.
+- If `API_URL` is not provided, it defaults to `http://localhost:8081`.
+- Android emulator note: when using the Android emulator, `localhost` resolves to the device. Use `http://10.0.2.2:8081`.
+
+Examples:
+
+```bash
+# iOS simulator (defaults to localhost:8081)
+flutter run --dart-define=API_URL=http://localhost:8081
+
+# Android emulator (use 10.0.2.2)
+flutter run --dart-define=API_URL=http://10.0.2.2:8081
+
+# Web (Chrome)
+flutter run -d chrome --dart-define=API_URL=http://localhost:8081
+```
+
+Startup sequence:
+- `main.dart` calls `WidgetsFlutterBinding.ensureInitialized()` and loads `.env` if present.
+- Resolves `API_URL` and uses `ContractService(baseUrl)` to fetch the canonical contract before booting.
+- Configures analytics by reading `analytics.backendUrl` from the loaded contract and calling `AnalyticsService().configure()`.
+- Passes the loaded contract map into `MyApp(initialContractMap: ...)`, which bootstraps the widget tree and distributes contract data.
 
 ## 🔧 Configuration Examples
 
