@@ -29,7 +29,7 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   CanonicalContract? contract;
 
   final EnhancedStateManager stateManager = EnhancedStateManager();
@@ -49,6 +49,8 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
+    // Observe app lifecycle to flush analytics on background/foreground transitions
+    WidgetsBinding.instance.addObserver(this);
     // React to auth token/user changes to refresh contract on login/logout
     stateManager.addListener(_onStateChanged);
     // Attach provider listener and defer initial canonical load until first frame
@@ -71,6 +73,7 @@ class _MyAppState extends State<MyApp> {
   @override
   void dispose() {
     // Detach listeners and clean up controllers/overlays
+    WidgetsBinding.instance.removeObserver(this);
     try {
       final provider = Provider.of<ContractProvider>(context, listen: false);
       provider.removeListener(_onProviderChanged);
@@ -80,6 +83,31 @@ class _MyAppState extends State<MyApp> {
     _toastEntry = null;
     _tabController?.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final analytics = AnalyticsService();
+    switch (state) {
+      case AppLifecycleState.resumed:
+        analytics.trackPageNavigation(
+          pageId: 'app',
+          eventType: TrackingEventType.appForeground,
+        );
+        break;
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.hidden:
+        analytics.trackPageNavigation(
+          pageId: 'app',
+          eventType: TrackingEventType.appBackground,
+        );
+        analytics.flush();
+        break;
+      case AppLifecycleState.detached:
+        // No-op
+        break;
+    }
   }
 
   void _attachProviderListener() {

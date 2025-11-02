@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:demo_json_parser/models/contract_result.dart';
-import 'package:demo_json_parser/services/contract_validator.dart';
 
 /// ContractService handles fetching the canonical contract JSON from the backend
 /// with a robust fallback strategy and clear error logging.
@@ -44,9 +43,7 @@ class ContractService {
       if (response.statusCode == 200) {
         _log('Primary endpoint succeeded (200)');
         final map = _parseJsonToMap(response.body, source: 'primary response');
-        _validateContractStructure(map);
-        // Run non-fatal validator to surface warnings during development
-        ContractValidator().validate(map);
+        // Trust backend contract; no local schema validation
         final version = _extractVersion(map);
         // Debug summary for canonical contract (primary)
         _logContractSummary('fetchCanonicalContract:primary', map, ContractSource.canonical);
@@ -80,9 +77,7 @@ class ContractService {
       if (response.statusCode == 200) {
         _log('Fallback endpoint succeeded (200)');
         final map = _parseJsonToMap(response.body, source: 'fallback response');
-        _validateContractStructure(map);
-        // Run non-fatal validator to surface warnings during development
-        ContractValidator().validate(map);
+        // Trust backend contract; no local schema validation
         final version = _extractVersion(map);
         // Debug summary for canonical contract (fallback)
         _logContractSummary('fetchCanonicalContract:fallback', map, ContractSource.canonical);
@@ -144,14 +139,7 @@ class ContractService {
     throw const FormatException('Expected a JSON object');
   }
 
-  /// Validate that required root objects exist to prevent downstream UI errors.
-  void _validateContractStructure(Map<String, dynamic> contract) {
-    final hasMeta = contract['meta'] is Map;
-    final hasPages = contract['pagesUI'] is Map;
-    if (!hasMeta || !hasPages) {
-      throw const FormatException('Contract validation failed: missing meta/pagesUI');
-    }
-  }
+  // Removed: trusting backend structure and letting UI handle missing fields gracefully.
 
   /// Extract version from `meta.version`, defaulting to "unknown" if absent.
   String _extractVersion(Map<String, dynamic> contract) {
@@ -230,9 +218,7 @@ class ContractService {
       if (response.statusCode == 200) {
         _log('User contract succeeded (200)');
         final map = _parseJsonToMap(response.body, source: 'user response');
-        _validateContractStructure(map);
-        // Run non-fatal validator to surface warnings during development
-        ContractValidator().validate(map);
+        // Trust backend contract; no local schema validation
         final version = _extractVersion(map);
         // Debug summary for personalized contract
         _logContractSummary('fetchUserContract', map, ContractSource.personalized, userId: userId);

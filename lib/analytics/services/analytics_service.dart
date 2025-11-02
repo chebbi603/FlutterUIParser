@@ -397,6 +397,10 @@ class AnalyticsService extends ChangeNotifier {
     if (e.pageId != null && e.pageId!.isNotEmpty) {
       dto['page'] = e.pageId;
     }
+    // Include top-level per-event alias for backend attribution when valid
+    if (currentUserId != null && _isValidObjectId(currentUserId)) {
+      dto['id'] = currentUserId;
+    }
     // Only include a valid sessionId (24-hex) to avoid server errors
     final sid = _getSessionIdFromState();
     if (sid != 'default' && _isValidObjectId(sid)) {

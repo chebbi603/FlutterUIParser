@@ -2,6 +2,22 @@ Project: demo_json_parser (Flutter)
 # Test Results — 2025-11-02
 Latest run: see `docs/history/flutter-test-results-run55.md` for details.
 
+## Summary (Run 58 — Per-event top-level id alias for backend attribution)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 45 tests
+- Duration: ~3s
+
+## Context
+- `AnalyticsService._formatEventForBackend` now includes a top-level `id` when a valid 24-hex user id exists in global state (`state.user.id`).
+- Backend honors per-event alias (`id`/`_id`/`userId`) for attribution, preventing fallback to `000000000000000000000000`.
+- Client continues to mirror `data.userId` for analytics segmentation.
+
+## Notable Output (truncated)
+```
+00:03 +45: All tests passed!
+```
+
 ## Summary (Run 55 — MVP public events ingestion)
 - Command: `flutter test`
 - Result: All tests passed
@@ -16,6 +32,22 @@ Latest run: see `docs/history/flutter-test-results-run55.md` for details.
 ## Notable Output (truncated)
 ```
 00:03 +44: All tests passed!
+```
+## Summary (Run 57 — Nav bar version/refresh + lifecycle flush)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 45 tests
+- Duration: ~3s
+
+## Context
+- Added contract version label and refresh button to navigation bar (`enhanced_page_builder.dart`).
+- Integrated lifecycle flush hooks in `app.dart` via `WidgetsBindingObserver` including `hidden` state handling.
+- Removed client-side contract validation from `ContractService`; now trusts backend.
+- Added widget test `test/widgets/navigation_bar_refresh_test.dart` covering version label and refresh action.
+
+## Notable Output (truncated)
+```
+00:03 +45: All tests passed!
 ```
 ## Summary (Run 56 — Public analytics endpoints optional auth header)
 - Command: `flutter test`

@@ -56,18 +56,33 @@ This document describes the Contract Refresh feature added to the app, including
   ```
 - `MyApp` listens to `ContractProvider` changes. When a new contract arrives or its version changes, `MyApp` reinitializes services and applies the new UI contract.
 
-## UI Integration (Pull-to-Refresh)
-**File**: `lib/app.dart`
-- The main screen and tabs are wrapped with a refresh-enabled `CustomScrollView`:
-  ```dart
-  CupertinoSliverRefreshControl(
-    onRefresh: provider.canRefresh
-      ? () => Provider.of<ContractProvider>(context, listen: false).refresh()
-      : null,
-  )
-  ```
-- Error banner: displayed when `provider.error` is non-null with a `Retry` button that invokes `provider.refresh()`.
-- Disabled banner: shown when `!provider.canRefresh` (e.g., offline or no backend URL) to prevent confusing behavior.
+## UI Integration (Navigation Bar)
+**File**: `lib/widgets/enhanced_page_builder.dart`
+- Each page with a `CupertinoNavigationBar` shows:
+  - Contract version label in the trailing area: `v <version>`.
+  - A refresh button (Cupertino refresh icon) when `canRefresh` is true.
+- Behavior:
+  - Tapping the refresh button invokes `ContractProvider.refreshContract()`.
+  - When actions are configured in the contract, they are preserved and the version/refresh controls are appended.
+  - Version defaults to `unknown` until a contract is loaded; updates live after refresh.
+
+**Implementation Snippet**:
+```dart
+final contractProvider = Provider.of<ContractProvider>(context);
+final trailingChildren = <Widget>[
+  ...actionWidgets,
+  if (actionWidgets.isNotEmpty) const SizedBox(width: 8),
+  Text('v ${contractProvider.contractVersion}'),
+  if (contractProvider.canRefresh) ...[
+    const SizedBox(width: 8),
+    CupertinoButton(
+      padding: EdgeInsets.zero,
+      onPressed: () => contractProvider.refreshContract(),
+      child: const Icon(CupertinoIcons.refresh),
+    ),
+  ],
+];
+```
 
 ## Contract Update Flow
 - `MyApp` listens to provider changes. When a refreshed contract differs by version, `MyApp` applies the updated contract immediately without restart.
@@ -82,8 +97,8 @@ This document describes the Contract Refresh feature added to the app, including
 - Optional navigation to the login screen may be triggered via `NavigationBridge.switchTo('/login')` when the route is tab-mapped.
 
 ## Success Metrics
-- Pull-to-refresh triggers contract reload from the backend when available.
-- Visible loading indicator at the top during refresh (`CupertinoSliverRefreshControl`).
+- Refresh button triggers contract reload from the backend when available.
+- Visual confirmation: contract version label updates after refresh completes.
 - UI updates immediately after refresh completes; new contract version is applied.
 - Errors are shown clearly with a banner and retry option.
 

@@ -55,6 +55,7 @@ Request:
 {
   "events": [
     {
+      "id": "507f1f77bcf86cd799439011",
       "timestamp": "2025-11-02T15:35:00.000Z",
       "componentId": "login_button",
       "eventType": "tap",
@@ -63,10 +64,12 @@ Request:
         "pageScope": "public",
         "contractType": "canonical",
         "contractVersion": "v1",
-        "isPersonalized": false
+        "isPersonalized": false,
+        "userId": "507f1f77bcf86cd799439011"
       }
     },
     {
+      "id": "507f1f77bcf86cd799439011",
       "timestamp": "2025-11-02T15:35:02.000Z",
       "componentId": "login_form",
       "eventType": "input",
@@ -76,7 +79,8 @@ Request:
         "result": "fail",
         "error": "Invalid credentials",
         "tag": "rapid_repeat",
-        "repeatCount": 3
+        "repeatCount": 3,
+        "userId": "507f1f77bcf86cd799439011"
       }
     }
   ]
@@ -91,6 +95,7 @@ Request:
 - `page`: optional page identifier
 - `sessionId`: optional string (only set when it is a valid 24-hex ObjectId)
 - `data`: optional object containing metadata and tags
+- `id`: optional top-level user identifier (24-hex ObjectId). When present and valid, the backend attributes the event to this user. The client also mirrors this in `data.userId` for downstream analytics.
 
 ### Event Type Mapping
 
@@ -123,6 +128,57 @@ AnalyticsService().updateTaggingConfig(
 - Add `trackedComponents` to your contract to enable wrapping.
 - Interact with the app; events accumulate in memory.
 - Call `flush()` (e.g., on page exit, user action, or a timed trigger) to send.
+
+## Lifecycle Flush (App Pause/Resume)
+
+- The app observes lifecycle transitions and flushes immediately when moving to background/inactive states.
+- On resume, a `navigate` event with type `appForeground` is tracked for session continuity.
+
+Reference implementation:
+
+```dart
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final analytics = AnalyticsService();
+    switch (state) {
+      case AppLifecycleState.resumed:
+        analytics.trackPageNavigation(
+          pageId: 'app',
+          eventType: TrackingEventType.appForeground,
+        );
+        break;
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.paused:
+        analytics.trackPageNavigation(
+          pageId: 'app',
+          eventType: TrackingEventType.appBackground,
+        );
+        analytics.flush();
+        break;
+      case AppLifecycleState.detached:
+        break;
+    }
+  }
+}
+```
+
+## UI Triggers
+
+- Tab navigation changes trigger a flush, ensuring page transitions are posted promptly.
+- You can add explicit flush buttons in debug builds or call `flush()` after key interactions.
 
 ## Troubleshooting
 

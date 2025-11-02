@@ -6,6 +6,8 @@ import '../analytics/services/analytics_service.dart';
 import '../analytics/models/tracking_event.dart';
 import '../analytics/widgets/component_tracker.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:provider/provider.dart';
+import '../providers/contract_provider.dart';
 
 /// Enhanced page builder with advanced layout and navigation support
 class EnhancedPageBuilder extends StatefulWidget {
@@ -108,21 +110,45 @@ class _EnhancedPageBuilderState extends State<EnhancedPageBuilder> {
   CupertinoNavigationBar _buildNavigationBar() {
     final navBar = widget.config.navigationBar!;
 
+    // Build existing actions
+    final actionWidgets = (navBar.actions != null && navBar.actions!.isNotEmpty)
+        ? navBar.actions!
+            .map((action) => _createTrackedComponent(action))
+            .toList()
+        : <Widget>[];
+
+    // Contract provider for version display and refresh capability
+    final contractProvider = Provider.of<ContractProvider>(context);
+    final versionText = Text(
+      'v ${contractProvider.contractVersion}',
+      style: CupertinoTheme.of(context).textTheme.textStyle,
+      overflow: TextOverflow.ellipsis,
+    );
+    final refreshButton = contractProvider.canRefresh
+        ? CupertinoButton(
+            padding: EdgeInsets.zero,
+            onPressed: () => contractProvider.refreshContract(),
+            child: const Icon(CupertinoIcons.refresh),
+          )
+        : const SizedBox.shrink();
+
+    final trailingChildren = <Widget>[];
+    trailingChildren.addAll(actionWidgets);
+    if (actionWidgets.isNotEmpty) {
+      trailingChildren.add(const SizedBox(width: 8));
+    }
+    trailingChildren.add(versionText);
+    if (contractProvider.canRefresh) {
+      trailingChildren.add(const SizedBox(width: 8));
+      trailingChildren.add(refreshButton);
+    }
+
     return CupertinoNavigationBar(
       middle: Text(navBar.title),
-      trailing:
-          navBar.actions != null && navBar.actions!.isNotEmpty
-              ? Row(
-                mainAxisSize: MainAxisSize.min,
-                children:
-                    navBar.actions!
-                        .map(
-                          (action) =>
-                              _createTrackedComponent(action),
-                        )
-                        .toList(),
-              )
-              : null,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: trailingChildren,
+      ),
     );
   }
 

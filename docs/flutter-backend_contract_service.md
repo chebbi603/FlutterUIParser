@@ -43,22 +43,17 @@ This document describes the `ContractService` responsible for fetching the canon
   - Raw: `{ ...canonical contract... }`
   - Wrapper: `{ "json": { ...canonical contract... }, ... }`
 - Returns `ContractResult` with `contract` map and `source` enum (`canonical` or `personalized`).
-- Validates presence of required root objects: `meta` and `pagesUI`.
+- Trusts backend structure; no client-side schema validation. UI selects safe defaults when optional fields are absent.
 - Extracts version from `meta.version`, defaulting to `"unknown"` when missing.
 
 ## Error Handling & Logging
 - Exceptions caught: `TimeoutException`, `FormatException`, `http.ClientException`, plus generic `Exception` for cross-platform network errors.
 - Logs each step with context: primary attempt, fallback attempt, and all caught exceptions.
  
-## Contract Validator (new)
-- Location: `lib/services/contract_validator.dart`
-- Purpose: Perform non-fatal, deeper checks on the parsed contract to surface potential issues early during development.
-- Invocation: Automatically executed after `_validateContractStructure(map)` inside `ContractService` for canonical and personalized contracts.
-- Behavior:
-  - Validates `meta` (`version`, `appName`) and `pagesUI` (`pages`, `routes` are objects and non-empty).
-  - Optionally inspects `themingAccessibility.tokens` and `typography` presence.
-  - Logs warnings in debug mode; never throws or blocks rendering.
-- Rationale: Ensures contract quality without impacting runtime; aids diagnostics when iterating on backend schemas.
+## Backend-only Validation (updated)
+- Client-side schema checks and `ContractValidator` have been removed.
+- Validation is enforced on the backend (NestJS); the client renders defensively and surfaces errors via `ContractProvider.error`.
+- Rationale: Avoid drift between client schemas and server contracts; simplify client and streamline iteration.
 
 ## Usage Example
 ```dart

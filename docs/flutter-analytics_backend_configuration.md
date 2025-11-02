@@ -102,13 +102,14 @@ ANALYTICS_BACKEND_URL=http://localhost:8081/events
 - Check backend logs or database to verify a POST batch is received when flush runs.
 - The service sends an array of simplified events with `timestamp`, `componentId`, and `eventType` keys.
 
-### Contract Attribution Fields (added)
+### Attribution Fields
 - Client includes the following on each event when `AnalyticsService` is properly wired:
   - `contractType` (`canonical` | `personalized` | `unknown`)
   - `contractVersion` (string)
   - `isPersonalized` (boolean)
-  - `userId` (string or null)
-- Ensure your ingestion pipeline tolerates missing values and uses these fields for segmentation.
+  - Top-level `id` (string, 24-hex) when a valid user exists — used by backend attribution
+  - Mirrored `data.userId` for downstream analytics segmentation
+- Ensure your ingestion pipeline tolerates missing values and uses these fields for segmentation and attribution.
 
 ## Testing and Docs
 - Run tests: `flutter test`.
@@ -130,6 +131,7 @@ ANALYTICS_BACKEND_URL=http://localhost:8081/events
 Example (server‑received event):
 ```json
 {
+  "id": "507f1f77bcf86cd799439011",
   "timestamp": 1681836102000,
   "componentId": "login_button",
   "eventType": "tap",
@@ -138,7 +140,7 @@ Example (server‑received event):
   "contractType": "canonical",
   "contractVersion": "1.0.0",
   "isPersonalized": false,
-  "userId": null
+  "userId": "507f1f77bcf86cd799439011"
 }
 ```
 
