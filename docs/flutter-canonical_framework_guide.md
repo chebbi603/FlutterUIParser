@@ -930,6 +930,46 @@ testWidgets('login form validation', (tester) async {
 3. **State Inspector**: View current state values
 4. **Theme Inspector**: Preview theme tokens
 
+## Shorthand Parsing (new)
+
+The parser accepts compact, human-friendly shorthand across several sections of the canonical contract. This allows writing smaller, cleaner JSON while preserving strong typing in the app.
+
+- DataModel fields
+  - Map entries: `{ "name": "id", "type": "string" }` or `{ "id": { "type": "string" } }`.
+  - Bare names in lists: `["title", "description"]` become `string` fields by default.
+  - `name:type` entries: `["priority:string", "rating:number"]`.
+  - Enum shorthand: `["pending", "done"]` parsed as `type=string`, `enum=["pending", "done"]`.
+- Relationships
+  - String model names default to `hasOne`: `"User"` -> `{ "type": "hasOne", "model": "User" }`.
+  - Detailed maps are preserved: `{ "type": "hasMany", "model": "Post", "foreignKey": "userId" }`.
+- Indexes
+  - String shorthand: `"unique:id"`, `"status"`.
+  - Map form: `{ "fields": ["email"], "unique": true }`.
+
+Type normalization and defaults
+- Synonyms: `int/integer`, `bool/boolean`, `map/object`, `list/array`, `float/double -> number`.
+- Defaults: bare field names default to `type=string`; string endpoints default to `method=GET`.
+
+Examples
+```json
+{
+  "dataModels": {
+    "Task": {
+      "fields": [
+        "id",
+        "title",
+        "priority:string",
+        { "name": "status", "enum": ["new", "done"] }
+      ],
+      "relationships": ["User"],
+      "indexes": ["unique:id", "status"]
+    }
+  }
+}
+```
+
+This shorthand is normalized internally to canonical forms, ensuring the runtime remains type-safe and predictable while accommodating compact input formats.
+
 ## Conclusion
 
 This canonical JSON-driven framework provides a comprehensive solution for building scalable, maintainable applications where the JSON contract serves as the single source of truth. The framework ensures type safety, supports schema evolution, and provides a rich set of features for modern app development while maintaining Apple's design guidelines through Cupertino widgets.

@@ -232,9 +232,11 @@ class EnhancedActionDispatcher {
         'loginMethod': 'email',
       });
 
+      // Prefer switching tabs when available; otherwise return to app root
+      // so the home scaffold rebuilds with bottom navigation enabled.
       final switched = NavigationBridge.switchTo('/home');
       if (!switched) {
-        Navigator.of(context).pushReplacementNamed('/home');
+        Navigator.of(context).popUntil((route) => route.isFirst);
       }
     } else {
       await _handleShowError(

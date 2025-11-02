@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 // Dotenv is no longer needed in app initialization; environment resolution happens in main.dart
 import 'models/config_models.dart';
 import 'widgets/enhanced_page_builder.dart';
@@ -43,6 +44,7 @@ class _MyAppState extends State<MyApp> {
   String? _lastUserId;
   bool _isRefreshing = false;
   AuthGate? _authGate;
+  bool _tabTrackingAttached = false;
 
   @override
   void initState() {
@@ -148,13 +150,60 @@ class _MyAppState extends State<MyApp> {
       apiService.setAuthToken(persistedAccess);
     }
 
+    // Debug-only: optional auto-login using credentials from .env
+    if (kDebugMode && !_isAuthed()) {
+      try {
+        final envReady = dotenv.isInitialized;
+        final autoLogin = envReady
+            ? (dotenv.env['DEBUG_AUTO_LOGIN']?.toLowerCase() == 'true')
+            : false;
+        final email = envReady ? dotenv.env['DEBUG_EMAIL']?.trim() : null;
+        final password = envReady ? dotenv.env['DEBUG_PASSWORD']?.trim() : null;
+        if (autoLogin && (email?.isNotEmpty ?? false) && (password?.isNotEmpty ?? false)) {
+          // Defer to avoid blocking initialization; errors are logged only
+          Future.microtask(() async {
+            try {
+              final ok = await authService.login(email: email!, password: password!);
+              if (ok) {
+                debugPrint('[Debug] Auto-login succeeded for $email');
+              } else {
+                debugPrint('[Debug] Auto-login failed for $email');
+              }
+            } catch (e) {
+              debugPrint('[Debug] Auto-login error: $e');
+            }
+          });
+        }
+      } catch (_) {}
+    }
+
     // Set tracked component ids for analytics widgets; actual AnalyticsService
     // configuration happens here once a contract is available.
     _trackedIds = loadedContract.analytics?.trackedComponents.toSet() ?? {};
 
-    // Configure analytics backend if provided by contract
-    final analyticsBackend = loadedContract.analytics?.backendUrl?.trim();
+    // Configure analytics backend if provided by contract, with safe normalization
+    var analyticsBackend = loadedContract.analytics?.backendUrl?.trim();
+    // Normalize localhost port to 8081 if misconfigured and ensure /events path
     if (analyticsBackend != null && analyticsBackend.isNotEmpty) {
+      final parsed = Uri.tryParse(analyticsBackend);
+      if (parsed != null) {
+        final isLocalHost = parsed.host == 'localhost' || parsed.host == '127.0.0.1';
+        final needsPortFix = isLocalHost && parsed.port == 8082; // backend runs on 8081
+        final needsPathFix = parsed.path.isEmpty || parsed.path == '/';
+        if (needsPortFix || needsPathFix) {
+          final fixed = Uri(
+            scheme: parsed.scheme.isNotEmpty ? parsed.scheme : 'http',
+            host: parsed.host,
+            port: needsPortFix ? 8081 : (parsed.hasPort ? parsed.port : 8081),
+            path: '/events',
+          );
+          analyticsBackend = fixed.toString();
+        }
+      }
+    }
+    // Safe default when contract omits analytics backend
+    analyticsBackend ??= 'http://localhost:8081/events';
+    if (analyticsBackend.isNotEmpty) {
       final analytics = AnalyticsService();
       analytics.configure(backendUrl: analyticsBackend);
       // Attach context providers for attribution
@@ -163,6 +212,13 @@ class _MyAppState extends State<MyApp> {
         analytics.attachContractProvider(provider);
       } catch (_) {}
       analytics.attachStateManager(stateManager);
+      if (kDebugMode) {
+        // Allow initial page events (e.g., landing_page_viewed) to be tracked
+        // then flush a small baseline batch so ingestion can be verified.
+        Future.delayed(const Duration(seconds: 2), () {
+          analytics.flushPublicBaseline();
+        });
+      }
     }
 
     // Execute app start events (simplified logging)
@@ -357,9 +413,11 @@ class _MyAppState extends State<MyApp> {
 
   CupertinoThemeData _buildTheme() {
     final themeMode = stateManager.getGlobalState<String>('theme') ?? 'light';
-    final isDark = themeMode.toLowerCase() == 'dark';
+    // Align 'system' to 'light' for now to avoid null maps
+    final selectedMode = themeMode.toLowerCase() == 'system' ? 'light' : themeMode;
+    final isDark = selectedMode.toLowerCase() == 'dark';
 
-    final tokens = contract!.themingAccessibility.tokens[themeMode] ?? {};
+    final tokens = contract!.themingAccessibility.tokens[selectedMode] ?? {};
     final primary = _parseHexColor(tokens['primary'] ?? (isDark ? '#0A84FF' : '#007AFF'));
     final surface = _parseHexColor(tokens['surface'] ?? (isDark ? '#1C1C1E' : '#FFFFFF'));
     final background = _parseHexColor(tokens['background'] ?? (isDark ? '#000000' : '#F8F9FA'));
@@ -514,6 +572,33 @@ class _MyAppState extends State<MyApp> {
     NavigationBridge.isRouteProtected = (route) => _authGate?.isRouteProtected(route) ?? false;
     NavigationBridge.isAuthed = () => _isAuthed();
 
+    // Attach one-time listener to track bottom navigation changes
+    if (!_tabTrackingAttached) {
+      _tabController!.addListener(() {
+        final idx = _tabController!.index;
+        if (idx == null) return;
+        if (idx < 0 || idx >= bottomNav.items.length) return;
+        final item = bottomNav.items[idx];
+        final pageId = tabPages[idx].id;
+        final key = item.route ?? (item.pageId.isNotEmpty ? item.pageId : item.title);
+        final componentId = 'bottom_nav_item_${idx}_${key}';
+        AnalyticsService().trackComponentInteraction(
+          componentId: componentId,
+          componentType: 'bottomNavItem',
+          eventType: TrackingEventType.routeChange,
+          pageId: pageId,
+          data: {
+            'title': item.title,
+            if (item.route != null) 'route': item.route,
+          },
+        );
+        // Immediately flush to backend so tab changes are visible without delay
+        // Flush is a no-op if backendUrl isn't configured or queue is empty
+        AnalyticsService().flush();
+      });
+      _tabTrackingAttached = true;
+    }
+
     return CupertinoTabScaffold(
       controller: _tabController,
       tabBar: CupertinoTabBar(
@@ -600,7 +685,8 @@ class _MyAppState extends State<MyApp> {
     if (colorString.startsWith('\${theme.') && colorString.endsWith('}')) {
       final tokenName = colorString.substring(8, colorString.length - 1);
       final themeMode = stateManager.getGlobalState<String>('theme') ?? 'light';
-      final themeTokens = contract!.themingAccessibility.tokens[themeMode];
+      final selectedMode = themeMode.toLowerCase() == 'system' ? 'light' : themeMode;
+      final themeTokens = contract!.themingAccessibility.tokens[selectedMode];
       final tokenValue = themeTokens?[tokenName];
       if (tokenValue != null) {
         return _parseHexColor(tokenValue);

@@ -208,31 +208,44 @@ class AnalyticsService extends ChangeNotifier {
 
     // Flush in batches to avoid oversized payloads
     final all = events.map((e) => _formatEventForBackend(e)).toList();
-    // Validate presence of contract metadata before sending
-    final missingMeta = all.where((m) =>
-        !m.containsKey('contractType') ||
-        !m.containsKey('contractVersion') ||
-        !m.containsKey('isPersonalized'));
+    // Validate presence of contract metadata before sending (now inside data)
+    final missingMeta = all.where((m) {
+      final data = (m['data'] as Map<String, dynamic>?) ?? const {};
+      return !data.containsKey('contractType') ||
+          !data.containsKey('contractVersion') ||
+          !data.containsKey('isPersonalized');
+    });
     if (missingMeta.isNotEmpty && kDebugMode) {
       print('⚠️ Analytics flush: ${missingMeta.length} events missing contract metadata. Ensure AnalyticsService is attached to ContractProvider.');
     }
     int sent = 0;
     while (sent < all.length) {
       final chunk = all.sublist(sent, (sent + batchSize) > all.length ? all.length : (sent + batchSize));
-      final payload = jsonEncode(chunk);
+      final payload = jsonEncode({'events': chunk});
       try {
+        // Attach Authorization header when token available
+        final headers = <String, String>{
+          'Content-Type': 'application/json',
+        };
+        try {
+          final token = _stateManager?.getGlobalState<String>('authToken');
+          if (token != null && token.isNotEmpty) {
+            headers['Authorization'] = 'Bearer $token';
+          }
+        } catch (_) {}
         final res = await http.post(
           Uri.parse(backendUrl!),
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: headers,
           body: payload,
         );
         if (res.statusCode >= 200 && res.statusCode < 300) {
           sent += chunk.length;
         } else if (res.statusCode == 401) {
           if (kDebugMode) print('❌ Analytics flush unauthorized (401).');
-          final hasAuthedEvents = chunk.any((ev) => ev['userId'] != null);
+          final hasAuthedEvents = chunk.any((ev) {
+            final data = (ev['data'] as Map<String, dynamic>?) ?? const {};
+            return data['userId'] != null;
+          });
           if (hasAuthedEvents) {
             if (kDebugMode) print('🧹 Clearing event queue due to auth failure for authenticated events');
             events.clear();
@@ -266,16 +279,26 @@ class AnalyticsService extends ChangeNotifier {
       return;
     }
     final formatted = events.map((e) => _formatEventForBackend(e)).toList();
-    final publicOnly = formatted.where((m) => (m['pageScope'] ?? 'public') == 'public').toList();
+    final publicOnly = formatted.where((m) {
+      final data = (m['data'] as Map<String, dynamic>?) ?? const {};
+      return (data['pageScope'] ?? 'public') == 'public';
+    }).toList();
     if (publicOnly.isEmpty) {
       if (kDebugMode) print('ℹ️ No public-scope events to flush');
       return;
     }
     try {
+      final headers = <String, String>{ 'Content-Type': 'application/json' };
+      try {
+        final token = _stateManager?.getGlobalState<String>('authToken');
+        if (token != null && token.isNotEmpty) {
+          headers['Authorization'] = 'Bearer $token';
+        }
+      } catch (_) {}
       final res = await http.post(
         Uri.parse(backendUrl!),
-        headers: { 'Content-Type': 'application/json' },
-        body: jsonEncode(publicOnly),
+        headers: headers,
+        body: jsonEncode({'events': publicOnly}),
       );
       if (res.statusCode >= 200 && res.statusCode < 300) {
         if (kDebugMode) print('🚀 Flushed ${publicOnly.length} public baseline events');
@@ -364,31 +387,41 @@ class AnalyticsService extends ChangeNotifier {
   }
 
   Map<String, dynamic> _formatEventForBackend(TrackingEvent e) {
-    final typeStr = e.type.toString().split('.').last;
     final userObj = _stateManager?.getGlobalState<Map<String, dynamic>>('user');
     final currentUserId = userObj?['id']?.toString();
-    final out = <String, dynamic>{
-      'timestamp': e.timestamp.millisecondsSinceEpoch,
-      'sessionId': _getSessionIdFromState(),
-      'userId': currentUserId ?? e.userId, // always include, may be null
+    final dto = <String, dynamic>{
+      'timestamp': e.timestamp.toIso8601String(),
       'componentId': e.componentId ?? 'unknown',
-      'eventType': typeStr,
+      'eventType': _mapEventTypeForBackend(e.type),
     };
-    // Contract metadata
-    out['contractType'] = e.data['contractType'] ?? 'unknown';
-    out['contractVersion'] = e.data['contractVersion'] ?? 'unknown';
-    out['isPersonalized'] = e.data['isPersonalized'] ?? false;
-    // Page scope (shared vs personalized)
-    out['pageScope'] = e.data['pageScope'] ?? _determinePageScope(e.pageId);
-    // Optional tags
-    if (e.data.containsKey('tag')) out['tag'] = e.data['tag'];
-    if (e.data.containsKey('repeatCount')) out['repeatCount'] = e.data['repeatCount'];
-    // Form submit result
-    if (e.type == TrackingEventType.formSubmit) {
-      out['result'] = (e.data['result'] ?? 'success').toString();
-      if (e.data.containsKey('error')) out['error'] = e.data['error'];
+    if (e.pageId != null && e.pageId!.isNotEmpty) {
+      dto['page'] = e.pageId;
     }
-    return out;
+    // Only include a valid sessionId (24-hex) to avoid server errors
+    final sid = _getSessionIdFromState();
+    if (sid != 'default' && _isValidObjectId(sid)) {
+      dto['sessionId'] = sid;
+    }
+    // Extra analytics metadata moved under `data`
+    final data = <String, dynamic>{
+      'pageScope': e.data['pageScope'] ?? _determinePageScope(e.pageId),
+      'contractType': _contractProvider?.contractSource?.toString().split('.').last ?? 'unknown',
+      'contractVersion': _contractProvider?.contractVersion ?? 'unknown',
+      'isPersonalized': _contractProvider?.isPersonalized ?? false,
+    };
+    if (currentUserId != null) data['userId'] = currentUserId;
+    if (e.data.containsKey('tag')) data['tag'] = e.data['tag'];
+    if (e.data.containsKey('repeatCount')) data['repeatCount'] = e.data['repeatCount'];
+    if (e.type == TrackingEventType.formSubmit) {
+      data['result'] = (e.data['result'] ?? 'success').toString();
+      if (e.data.containsKey('error')) data['error'] = e.data['error'];
+    }
+    // Attach explicit error message if present
+    if (e.errorMessage != null && e.errorMessage!.isNotEmpty) {
+      data['message'] = e.errorMessage;
+    }
+    dto['data'] = data;
+    return dto;
   }
 
   String _getSessionIdFromState() {
@@ -406,12 +439,13 @@ class AnalyticsService extends ChangeNotifier {
       final sid = m['sessionId'];
       final et = m['eventType'];
       final cid = m['componentId'];
-      final scope = m['pageScope'];
+      final scope = (m['data'] as Map<String, dynamic>?)?['pageScope'];
       return '$ts|$sid|$et|$cid|$scope';
     }).toSet();
     events.removeWhere((e) {
       final fm = _formatEventForBackend(e);
-      final sig = '${fm['timestamp']}|${fm['sessionId']}|${fm['eventType']}|${fm['componentId']}|${fm['pageScope']}';
+      final d = (fm['data'] as Map<String, dynamic>?) ?? const {};
+      final sig = '${fm['timestamp']}|${fm['sessionId']}|${fm['eventType']}|${fm['componentId']}|${d['pageScope']}';
       return signatures.contains(sig);
     });
   }
@@ -429,8 +463,14 @@ class AnalyticsService extends ChangeNotifier {
 
       // Try to infer from contract routes' auth requirements
       final contract = _contractProvider?.contract;
-      final pagesUi = (contract is Map<String, dynamic>) ? contract['pagesUI'] as Map<String, dynamic>? : null;
-      final routes = pagesUi != null ? pagesUi['routes'] as Map<String, dynamic>? : null;
+      final Map<String, dynamic>? pagesUi =
+          (contract is Map<String, dynamic>) && (contract['pagesUI'] is Map<String, dynamic>)
+              ? contract['pagesUI'] as Map<String, dynamic>
+              : null;
+      final Map<String, dynamic>? routes =
+          pagesUi != null && pagesUi['routes'] is Map<String, dynamic>
+              ? pagesUi['routes'] as Map<String, dynamic>
+              : null;
       if (routes != null) {
         for (final entry in routes.entries) {
           final value = entry.value;
@@ -460,5 +500,41 @@ class AnalyticsService extends ChangeNotifier {
     final ts = DateTime.now().millisecondsSinceEpoch;
     final rand = Random().nextInt(1000);
     return 'evt_${ts}_$rand';
+  }
+
+  String _mapEventTypeForBackend(TrackingEventType type) {
+    switch (type) {
+      case TrackingEventType.tap:
+        return 'tap';
+      case TrackingEventType.scroll:
+      case TrackingEventType.swipe:
+      case TrackingEventType.componentRender:
+      case TrackingEventType.apiCall:
+        return 'view';
+      case TrackingEventType.focus:
+      case TrackingEventType.blur:
+      case TrackingEventType.input:
+      case TrackingEventType.stateChange:
+      case TrackingEventType.formSubmit:
+        return 'input';
+      case TrackingEventType.pageEnter:
+      case TrackingEventType.pageExit:
+      case TrackingEventType.routeChange:
+      case TrackingEventType.networkChange:
+      case TrackingEventType.appBackground:
+      case TrackingEventType.appForeground:
+        return 'navigate';
+      case TrackingEventType.validationError:
+      case TrackingEventType.error:
+        return 'error';
+      case TrackingEventType.custom:
+      default:
+        return 'tap';
+    }
+  }
+
+  bool _isValidObjectId(String id) {
+    final hex24 = RegExp(r'^[0-9a-fA-F]{24}$');
+    return hex24.hasMatch(id);
   }
 }

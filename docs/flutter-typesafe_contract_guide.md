@@ -169,6 +169,28 @@ This guide explains how to author a robust, typesafe JSON contract that drives y
 - Missing icon mappings for navigation or `icon` components
 - Unpersisted critical state (theme, auth) causing resets on restart
 
+## Robust Parsing Patterns (Updated)
+- Always guard dynamic fields with `is Map<String, dynamic>` before converting:
+  - `final routes = json['routes'] is Map<String, dynamic> ? json['routes'] as Map<String, dynamic> : <String, dynamic>{};`
+- When reading nested maps (e.g., `icons.mapping`), check parent map first:
+  - `final iconsMap = (json['icons'] is Map && (json['icons'] as Map)['mapping'] is Map<String, dynamic>) ? (json['icons'] as Map)['mapping'] as Map<String, dynamic> : <String, dynamic>{};`
+- For arrays of objects, coerce scalars to maps where safe or skip:
+  - `final vmap = value is Map<String, dynamic> ? value : {'type': 'string', 'default': value};`
+- Never use nullable casts with `?? {}` on maps (e.g., `as Map<String, dynamic>? ?? {}`) — this can throw when the source is a string. Prefer the guard pattern above.
+- Apply the same pattern to analytics and events models (`TrackingEvent.data/context`, `eventsActions.actions`).
+
+These practices prevent `String is not a subtype of Map<String, dynamic>` runtime exceptions when contracts contain unexpected values.
+
+## Binding and Formatting Rules (Updated)
+- Keep bindings simple: `${item.field}` and `${state.key}` are supported; avoid complex expressions, method calls, or pipes inside `${...}`.
+- Do not embed formatting logic in bindings (e.g., `${(item.duration % 60).toString().padLeft(2,'0')}`); instead, add precomputed fields in data like `${item.durationText}`.
+- For fallbacks, prefer pre-populated defaults in `state` or data instead of logical operators inside bindings (avoid `${state.user.avatar || 'https://...'}').
+- Prevent overflow by:
+  - Adding page-level `padding` and item-level `margin`.
+  - Keeping label text concise and using short preformatted values (e.g., `3:45`).
+  - Reserving trailing icons sufficient space (e.g., add `margin.left`).
+- Grids and lists should define spacing for readability (e.g., `grid.style.gap`, card `margin.bottom`).
+
 ## Example: Service Response Schema
 ```json
 {

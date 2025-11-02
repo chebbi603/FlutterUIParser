@@ -103,8 +103,12 @@ class TrackingEvent {
       componentId: json['componentId'] as String?,
       componentType: json['componentType'] as String?,
       pageId: json['pageId'] as String?,
-      data: Map<String, dynamic>.from(json['data'] ?? {}),
-      context: Map<String, dynamic>.from(json['context'] ?? {}),
+      data: (json['data'] is Map<String, dynamic>)
+          ? Map<String, dynamic>.from(json['data'] as Map)
+          : <String, dynamic>{},
+      context: (json['context'] is Map<String, dynamic>)
+          ? Map<String, dynamic>.from(json['context'] as Map)
+          : <String, dynamic>{},
       userId: json['userId'] as String?,
       duration: json['duration'] != null 
           ? Duration(milliseconds: json['duration'] as int)

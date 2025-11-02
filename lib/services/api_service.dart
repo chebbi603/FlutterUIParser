@@ -410,10 +410,14 @@ class EnhancedApiService {
       }
       // Properties validation
       if (schema['properties'] is Map<String, dynamic>) {
-        final props = schema['properties'] as Map<String, dynamic>;
+        final Map<String, dynamic> props =
+            schema['properties'] as Map<String, dynamic>;
         for (final entry in props.entries) {
           final key = entry.key;
-          final propSchema = Map<String, dynamic>.from(entry.value);
+          final Map<String, dynamic> propSchema =
+              (entry.value is Map<String, dynamic>)
+                  ? Map<String, dynamic>.from(entry.value as Map)
+                  : <String, dynamic>{};
           final value = data[key];
           _validateValueAgainstSchema(key, value, propSchema);
         }

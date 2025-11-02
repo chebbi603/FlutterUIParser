@@ -20,11 +20,38 @@ class NetworkOrAssetImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final image =
-        isNetwork
-            ? Image.network(src, fit: fit, width: width, height: height)
-            : Image.asset(src, fit: fit, width: width, height: height);
-    return image;
+    final String trimmed = src.trim();
+
+    Widget fallback() {
+      return Container(
+        width: width,
+        height: height,
+        color: CupertinoColors.systemGrey6,
+      );
+    }
+
+    if (trimmed.isEmpty) {
+      // Gracefully render placeholder when src is empty
+      return fallback();
+    }
+
+    if (isNetwork) {
+      return Image.network(
+        trimmed,
+        fit: fit,
+        width: width,
+        height: height,
+        errorBuilder: (context, error, stackTrace) => fallback(),
+      );
+    }
+
+    return Image.asset(
+      trimmed,
+      fit: fit,
+      width: width,
+      height: height,
+      errorBuilder: (context, error, stackTrace) => fallback(),
+    );
   }
 }
 

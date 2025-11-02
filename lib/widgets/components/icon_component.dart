@@ -8,7 +8,8 @@ class IconComponent {
     return Icon(
       ParsingUtils.parseIcon(config.icon ?? config.name ?? 'circle'),
       size: ParsingUtils.safeToDouble(config.size) ?? 24.0,
-      color: ParsingUtils.parseColor(config.style?.color),
+      // Avoid unintended blue fallback; allow theme defaults
+      color: ParsingUtils.parseColorOrNull(config.style?.color),
     );
   }
 
@@ -25,7 +26,8 @@ class IconComponent {
             child: Icon(
               ParsingUtils.parseIcon(config.icon ?? config.name ?? 'circle'),
               size: ParsingUtils.safeToDouble(config.size) ?? 24.0,
-              color: ParsingUtils.parseColor(config.style?.color),
+              // Avoid unintended blue fallback; allow theme defaults
+              color: ParsingUtils.parseColorOrNull(config.style?.color),
             ),
           ),
     );

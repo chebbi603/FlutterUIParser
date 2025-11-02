@@ -7,6 +7,7 @@ class ComponentStyleUtils {
     return TextStyle(
       fontSize: style?.fontSize ?? 16.0,
       fontWeight: _parseFontWeight(style?.fontWeight),
+      // Avoid forcing a fallback color; let theme defaults apply
       color: _parseColor(style?.color),
     );
   }
@@ -28,7 +29,8 @@ class ComponentStyleUtils {
   }
 
   static Color? _parseColor(String? colorString) {
-    return ParsingUtils.parseColor(colorString);
+    // Use nullable parsing to prevent unintended blue fallbacks
+    return ParsingUtils.parseColorOrNull(colorString);
   }
 
   static FontWeight _parseFontWeight(String? weight) {

@@ -28,9 +28,11 @@ This document lists every component type rendered by `EnhancedComponentFactory` 
   - Named: `red`, `blue`, `green`, `orange`, `yellow`, `purple`, `pink`, `teal`, `indigo`, `gray/grey`, `black`, `white`, `transparent`.
   - Hex: `#RGB`, `#RRGGBB` (auto `FF` alpha), `#AARRGGBB`.
   - `rgb(r,g,b)` and `rgba(r,g,b,a)`.
+  - Defaults: Components now avoid forcing fallback blue when a color is omitted; unspecified colors inherit platform/theme defaults. Use `style.foregroundColor` or `style.color` only when you need an explicit override.
 - **Icons**
   - Use `icon` or `name`. If mapped in `assets.icons` to `CupertinoIcons.<name>`, that mapping wins.
   - Built-ins include: `house`, `doc_text`, `person_circle`, `gear`, `plus`, `ellipsis`, `chart_bar`, `exclamationmark_triangle`; fallback `circle`.
+  - Media icons added: `music`, `podcast(s)`, `audiobook(s)` resolve to appropriate `CupertinoIcons`.
 
 ## Components
 
@@ -61,7 +63,9 @@ This document lists every component type rendered by `EnhancedComponentFactory` 
 ```json
 { "type": "button", "text": "Save", "style": { "backgroundColor": "${theme.primary}", "foregroundColor": "white" }, "onTap": { "action": "navigate", "route": "/success" } }
 ```
- - Defaults: If `style.backgroundColor` is omitted, the button uses `${theme.primary}` from the active theme. If `style.foregroundColor` is omitted, platform defaults apply.
+ - Defaults:
+   - `style.backgroundColor` omitted → uses `${theme.primary}` from the active theme.
+   - `style.foregroundColor` omitted → inherits platform-contrasting text color (Cupertino defaults), avoiding unintended blue.
 
 ### Text Button (`type: "textButton"`)
 - Props: `text`, `style.color`, `style.fontSize`, `style.fontWeight`, `style.textAlign`, `style.padding`.
@@ -89,6 +93,7 @@ This document lists every component type rendered by `EnhancedComponentFactory` 
 - Behavior:
   - Resolves templates at build time and reacts to state updates via graph subscriptions.
   - Loads network image when `src` starts with `http`; otherwise treats as asset path.
+  - Robustness: Empty `src` or failed loads render a neutral placeholder box (uses component `style.width`/`style.height` when provided) instead of throwing.
 - Examples:
 ```json
 { "type": "image", "src": "https://example.com/banner.png", "style": { "width": 320, "height": 180 } }
@@ -101,6 +106,7 @@ This document lists every component type rendered by `EnhancedComponentFactory` 
 - Purpose: Styled container; propagates `boundData` to children.
 - Props: `children`, `style.padding`, `style.backgroundColor`, `style.borderRadius`, `style.elevation`.
  - Defaults: No implicit padding; specify `style.padding` explicitly if needed.
+ - Tap behavior: `onTap` wraps the inner content with `InkWell` inside `Material` to ensure ripple effects and avoid "No Material ancestor found" errors.
 - Example:
 ```json
 { "type": "card", "style": { "padding": { "all": 16 }, "backgroundColor": "${theme.surface}" }, "children": [ { "type": "text", "binding": "title" } ] }
@@ -127,6 +133,9 @@ This document lists every component type rendered by `EnhancedComponentFactory` 
   "emptyState": { "type": "text", "text": "No items" }
 }
 ```
+
+- Defaults:
+  - Non-virtual lists include a default horizontal padding of `16` for nicer card spacing. Provide `style.padding` to override or remove it.
 
 - Static Example:
 ```json
@@ -166,12 +175,15 @@ This document lists every component type rendered by `EnhancedComponentFactory` 
 
 ### Grid (`type: "grid"`)
 - Props: `children`, `columns` (default 2), `spacing`.
+ - Binding: Children receive the parent `boundData` automatically.
 
 ### Row (`type: "row"`) and Column (`type: "column"`)
 - Props: `children`, `spacing`, `mainAxisAlignment` (`start`, `center`, `end`, `spaceBetween`, `spaceAround`, `spaceEvenly`), `crossAxisAlignment` (`start`, `center`, `end`, `stretch`, `baseline`).
+ - Binding: Children receive the parent `boundData` automatically.
 
 ### Center (`type: "center"`)
 - Behavior: Centers first child of `children`.
+ - Binding: The centered child receives the parent `boundData`.
 
 ### Hero (`type: "hero"`)
 - Props: `children`, `style.padding`, `style.backgroundColor`, `style.borderRadius`.

@@ -91,7 +91,7 @@ Note: Typography presets currently map `fontSize` and `fontWeight`. `lineHeight`
 ## Fallbacks and Errors
 
 - Unknown `style` token: logged once to the console; explicit overrides still apply.
-- Unknown `${theme.*}` token: resolved as `null` and ignored; affected colors fall back to platform defaults unless explicit values are provided.
+- Unknown `${theme.*}` token: resolved as `null` and ignored; affected colors now fall back to platform defaults (no forced blue) unless explicit values are provided.
 - Numeric fields provided as strings (e.g., `"size": "3"`): safely parsed via `ParsingUtils`; avoids runtime type errors.
 - Missing or malformed `style`: ignored gracefully; defaults apply.
 
@@ -117,16 +117,66 @@ Note: Typography presets currently map `fontSize` and `fontWeight`. `lineHeight`
 - Parser: `StyleConfig.fromJson` accepts strings and objects; strings populate `use`.
 - Factory: typography token resolution merges `fontSize` and `fontWeight`; theme tokens resolved for colors.
 - Numeric safety: `EnhancedComponentConfig.fromJson` uses `ParsingUtils.safeToInt`/`safeToDouble` for robust conversions.
- - Page backgrounds: `EnhancedPageBuilder` resolves `${theme.*}` and named/hex/rgb colors via the factory’s token resolver and `ParsingUtils.parseColor`, ensuring pages use the same color parsing pipeline as components.
+- Page backgrounds: `EnhancedPageBuilder` resolves `${theme.*}` and named/hex/rgb colors via the factory’s token resolver and `ParsingUtils.parseColorOrNull`, ensuring pages use the same color parsing pipeline as components and avoid unintended blue fallback.
+
+## Button Color Precedence
+
+- Filled buttons (`CupertinoButton` with `backgroundColor`) resolve text color using this order:
+  - `style.color` — primary text color key across components.
+  - `style.foregroundColor` — explicit text color for filled buttons.
+  - If `backgroundColor` is `${theme.primary}`, fallback to `${theme.onPrimary}` when available.
+  - If `backgroundColor` is `${theme.surface}`, fallback to `${theme.onSurface}` when available.
+  - Otherwise, no explicit text color is set and the platform’s default contrasting color applies.
+- Text buttons use `style.color`, falling back to `${theme.primary}` when not provided.
+- All `${theme.*}` tokens are resolved against the current theme and parsed via the shared color pipeline to avoid unintended blue defaults.
 
 ## Testing
 
 - All tests pass: see `docs/flutter-test-results.md` latest entry.
 - Recommended to add contract samples using `style` as string, object with `use`, and explicit overrides to validate rendering.
 
+## Text Truncation & Overflow
+
+- Use `maxLines` to cap text length; set to `1` for list rows and compact UI.
+- Use `overflow: "ellipsis"` to indicate truncated text gracefully.
+- Recommended defaults for list items:
+  - Title: `maxLines: 1`, `overflow: "ellipsis"`
+  - Subtitle: `maxLines: 1`, `overflow: "ellipsis"`
+  - Ancillary fields (e.g., `durationText`): `maxLines: 1`
+- Keep trailing icons small to avoid horizontal overflow; prefer `size: 20–24`.
+- Combine padding/margin with truncation to prevent layout overflows.
+
+### Example (Songs list row)
+
+```json
+{
+  "type": "list",
+  "dataSource": { "type": "static", "items": [ { "title": "Star Review", "subtitle": "By Artist", "durationText": "3:45" } ] },
+  "itemBuilder": {
+    "type": "row",
+    "children": [
+      { "type": "image", "src": "${item.thumbnail}", "style": { "width": 56, "height": 56, "borderRadius": 8 } },
+      { "type": "column", "children": [
+        { "type": "text", "text": "${item.title}", "style": { "maxLines": 1, "overflow": "ellipsis" } },
+        { "type": "text", "text": "${item.subtitle}", "style": { "maxLines": 1, "overflow": "ellipsis" } },
+        { "type": "text", "text": "${item.durationText}", "style": { "maxLines": 1 } }
+      ]},
+      { "type": "icon", "name": "play", "style": { "size": 24 } }
+    ],
+    "style": { "padding": { "horizontal": 12, "vertical": 8 }, "margin": { "bottom": 8 }, "backgroundColor": "${theme.surface}", "borderRadius": 8 }
+  }
+}
+```
+
+### Pitfalls
+
+- Avoid string interpolation expressions like `${(${item.duration} % 60).toString()...}` inside contract text fields; precompute strings in data (e.g., `durationText`).
+- Large trailing icons (`size >= 32`) often cause right-side overflow in constrained rows.
+- Missing padding/margins can cause `RenderFlex` overflow when content is tight; add spacing.
+
 ## App Theme Mapping
 
-- The app’s `CupertinoThemeData` is built from `contract.themingAccessibility.tokens[theme]` where `theme` is the global state key (`state.global.theme`).
+- The app’s `CupertinoThemeData` is built from `contract.themingAccessibility.tokens[theme]` where `theme` is the global state key (`state.global.theme`). When `theme=system`, it maps to `light` by default.
 - `primaryColor` ← `${theme.primary}`; `barBackgroundColor` ← `${theme.surface}`; `scaffoldBackgroundColor` ← `${theme.background}`; text color defaults to `${theme.onSurface}`.
 - Typography presets (e.g., `body`, `title1`) feed the `CupertinoTextThemeData` weights and sizes; font weight strings are mapped to Flutter `FontWeight`.
 - Default selection: `theme=light` unless user changes it via global state or OS setting.

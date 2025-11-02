@@ -192,17 +192,64 @@ class DataModel {
   });
 
   factory DataModel.fromJson(Map<String, dynamic> json) {
+    // Normalize fields: accept Map or List of {name, ...} or list of strings
+    final dynamic rawFields = json['fields'];
+    final Map<String, dynamic> fieldsSource = {};
+    if (rawFields is Map<String, dynamic>) {
+      fieldsSource.addAll(rawFields);
+    } else if (rawFields is List) {
+      for (int i = 0; i < rawFields.length; i++) {
+        final item = rawFields[i];
+        if (item is Map<String, dynamic>) {
+          final key = item['name']?.toString() ?? item['id']?.toString() ?? 'field_$i';
+          fieldsSource[key] = item;
+        } else if (item is String) {
+          final s = item.trim();
+          if (s.contains(':')) {
+            // Support "name:type" shorthand
+            final parts = s.split(':');
+            final name = parts.first.trim();
+            final type = parts.sublist(1).join(':').trim();
+            fieldsSource[name] = type;
+          } else {
+            // Treat bare string as field name with default string type
+            fieldsSource[s] = 'string';
+          }
+        } else if (item != null) {
+          // Fallback: keep as-is under generated key (bool/num default value shorthand)
+          fieldsSource['field_$i'] = item;
+        }
+      }
+    }
+
+    // Normalize relationships: accept Map or List with {name, model, type} or string model name
+    final dynamic rawRelationships = json['relationships'];
+    final Map<String, dynamic> relSource = {};
+    if (rawRelationships is Map<String, dynamic>) {
+      relSource.addAll(rawRelationships);
+    } else if (rawRelationships is List) {
+      for (int i = 0; i < rawRelationships.length; i++) {
+        final item = rawRelationships[i];
+        if (item is Map<String, dynamic>) {
+          final key = item['name']?.toString() ?? item['id']?.toString() ?? item['model']?.toString() ?? 'rel_$i';
+          relSource[key] = item;
+        } else if (item is String) {
+          relSource['rel_$i'] = item; // shorthand: model name only
+        }
+      }
+    }
+
+    // Normalize indexes: accept List of Map or string shorthand
+    final List<dynamic> rawIndexes = (json['indexes'] as List? ?? []).toList();
+
     return DataModel(
-      fields: (json['fields'] as Map<String, dynamic>? ?? {}).map(
+      fields: fieldsSource.map(
         (key, value) => MapEntry(key, FieldConfig.fromJson(value)),
       ),
-      relationships: (json['relationships'] as Map<String, dynamic>? ?? {}).map(
+      relationships: relSource.map(
         (key, value) => MapEntry(key, RelationshipConfig.fromJson(value)),
       ),
-      indexes:
-          (json['indexes'] as List? ?? [])
-              .map((index) => IndexConfig.fromJson(index))
-              .toList(),
+      indexes: rawIndexes.map((index) => IndexConfig.fromJson(index)).toList(),
     );
   }
 }
@@ -242,24 +289,49 @@ class FieldConfig {
     this.autoUpdate = false,
   });
 
-  factory FieldConfig.fromJson(Map<String, dynamic> json) {
+  factory FieldConfig.fromJson(dynamic json) {
+    // Support shorthand inputs: string -> type; list -> enum values; bool/num -> default
+    if (json is String) {
+      final normalized = json.toLowerCase().trim();
+      String type = 'string';
+      if (normalized == 'int' || normalized == 'integer') type = 'integer';
+      else if (normalized == 'number' || normalized == 'float' || normalized == 'double') type = 'number';
+      else if (normalized == 'bool' || normalized == 'boolean') type = 'boolean';
+      else if (normalized == 'object' || normalized == 'map') type = 'object';
+      else if (normalized == 'array' || normalized == 'list') type = 'array';
+      return FieldConfig(type: type);
+    }
+    if (json is List) {
+      // Treat list as enum values shorthand
+      return FieldConfig(type: 'string', enumValues: json.map((e) => e.toString()).toList());
+    }
+    if (json is bool) {
+      return FieldConfig(type: 'boolean', defaultValue: json);
+    }
+    if (json is num) {
+      // Numeric default value shorthand
+      return FieldConfig(type: (json is int) ? 'integer' : 'number', defaultValue: json);
+    }
+    final Map<String, dynamic> map =
+        (json is Map<String, dynamic>) ? json : <String, dynamic>{};
     return FieldConfig(
-      type: json['type'] ?? 'string',
-      required: json['required'] ?? false,
-      primaryKey: json['primaryKey'] ?? false,
-      unique: json['unique'] ?? false,
-      defaultValue: json['default'],
-      validation: json['validation'],
-      minLength: json['minLength'],
-      maxLength: json['maxLength'],
-      min: json['min'],
-      max: json['max'],
-      enumValues:
-          json['values'] != null ? List<String>.from(json['values']) : null,
-      foreignKey: json['foreignKey'],
-      schema: json['schema'],
-      autoGenerate: json['autoGenerate'] ?? false,
-      autoUpdate: json['autoUpdate'] ?? false,
+      type: map['type'] ?? 'string',
+      required: map['required'] ?? false,
+      primaryKey: map['primaryKey'] ?? false,
+      unique: map['unique'] ?? false,
+      defaultValue: map['default'],
+      validation: map['validation'],
+      minLength: map['minLength'],
+      maxLength: map['maxLength'],
+      min: map['min'] ?? map['minimum'],
+      max: map['max'] ?? map['maximum'],
+      enumValues: map['values'] != null
+          ? List<String>.from(map['values'])
+          : (map['enum'] != null ? List<String>.from(map['enum']) : null),
+      foreignKey: map['foreignKey'] ?? map['ref'],
+      schema: map['schema'],
+      autoGenerate: map['autoGenerate'] ?? false,
+      autoUpdate: map['autoUpdate'] ?? false,
     );
   }
 }
@@ -277,12 +349,18 @@ class RelationshipConfig {
     this.through,
   });
 
-  factory RelationshipConfig.fromJson(Map<String, dynamic> json) {
+  factory RelationshipConfig.fromJson(dynamic json) {
+    if (json is String) {
+      // Shorthand: model name implies hasOne
+      return RelationshipConfig(type: 'hasOne', model: json);
+    }
+    final Map<String, dynamic> map =
+        (json is Map<String, dynamic>) ? json : <String, dynamic>{};
     return RelationshipConfig(
-      type: json['type'] ?? 'hasOne',
-      model: json['model'] ?? '',
-      foreignKey: json['foreignKey'],
-      through: json['through'],
+      type: map['type'] ?? 'hasOne',
+      model: map['model']?.toString() ?? '',
+      foreignKey: map['foreignKey']?.toString(),
+      through: map['through']?.toString(),
     );
   }
 }
@@ -294,11 +372,27 @@ class IndexConfig {
 
   IndexConfig({required this.fields, this.unique = false, this.where});
 
-  factory IndexConfig.fromJson(Map<String, dynamic> json) {
+  factory IndexConfig.fromJson(dynamic json) {
+    if (json is String) {
+      final normalized = json.trim();
+      bool unique = false;
+      String expr = normalized;
+      if (normalized.toLowerCase().startsWith('unique:')) {
+        unique = true;
+        expr = normalized.substring('unique:'.length);
+      }
+      final fields = expr.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+      return IndexConfig(fields: fields, unique: unique);
+    }
+    if (json is List) {
+      return IndexConfig(fields: json.map((e) => e.toString()).toList());
+    }
+    final Map<String, dynamic> map =
+        (json is Map<String, dynamic>) ? json : <String, dynamic>{};
     return IndexConfig(
-      fields: List<String>.from(json['fields'] ?? []),
-      unique: json['unique'] ?? false,
-      where: json['where'],
+      fields: List<String>.from(map['fields'] ?? []),
+      unique: map['unique'] ?? false,
+      where: map['where'],
     );
   }
 }
@@ -391,8 +485,19 @@ class EndpointConfig {
             'path': json?.toString() ?? '',
             'method': 'GET',
           };
+    // Normalize common alias keys
+    // Auth flag: accept `auth`, `authRequired`, or `requiresAuth`
+    final dynamic authRaw = map.containsKey('auth')
+        ? map['auth']
+        : (map.containsKey('authRequired')
+            ? map['authRequired']
+            : map['requiresAuth']);
 
-    final qpRaw = map['queryParams'];
+    // Query params: accept `queryParams` or shorthand `params`
+    final qpRaw = map.containsKey('queryParams') ? map['queryParams'] : map['params'];
+
+    // Retry policy: accept `retryPolicy` or shorthand `retry`
+    final dynamic retryRaw = map.containsKey('retryPolicy') ? map['retryPolicy'] : map['retry'];
     final Map<String, QueryParamConfig>? qp = qpRaw is Map<String, dynamic>
         ? qpRaw.map((key, value) {
             final Map<String, dynamic> vmap = value is Map<String, dynamic>
@@ -408,7 +513,7 @@ class EndpointConfig {
     return EndpointConfig(
       path: map['path'] ?? '',
       method: map['method'] ?? 'GET',
-      auth: map['auth'],
+      auth: authRaw,
       queryParams: qp,
       requestSchema: map['requestSchema'] is Map<String, dynamic>
           ? map['requestSchema'] as Map<String, dynamic>
@@ -423,10 +528,7 @@ class EndpointConfig {
           : null,
       caching:
           map['caching'] != null ? CachingConfig.fromJson(map['caching']) : null,
-      retryPolicy:
-          map['retryPolicy'] != null
-              ? RetryPolicyConfig.fromJson(map['retryPolicy'])
-              : null,
+      retryPolicy: retryRaw != null ? RetryPolicyConfig.fromJson(retryRaw) : null,
     );
   }
 }
@@ -534,7 +636,10 @@ class PagesUIConfig {
 
   factory PagesUIConfig.fromJson(Map<String, dynamic> json) {
     return PagesUIConfig(
-      routes: (json['routes'] as Map<String, dynamic>? ?? {}).map(
+      routes: (json['routes'] is Map<String, dynamic>
+              ? json['routes'] as Map<String, dynamic>
+              : <String, dynamic>{})
+          .map(
         (key, value) => MapEntry(key, RouteConfig.fromJson(value)),
       ),
       bottomNavigation:
@@ -543,7 +648,10 @@ class PagesUIConfig {
                 json['bottomNavigation'],
               )
               : null,
-      pages: (json['pages'] as Map<String, dynamic>? ?? {}).map(
+      pages: (json['pages'] is Map<String, dynamic>
+              ? json['pages'] as Map<String, dynamic>
+              : <String, dynamic>{})
+          .map(
         (key, value) => MapEntry(key, EnhancedPageConfig.fromJson(value)),
       ),
     );
@@ -604,7 +712,8 @@ class BottomNavigationItemConfig {
         route: null,
       );
     }
-    final map = json as Map<String, dynamic>? ?? <String, dynamic>{};
+    final Map<String, dynamic> map =
+        (json is Map<String, dynamic>) ? json : <String, dynamic>{};
     final String? route = map['route']?.toString();
     final String title = (map['title'] ?? map['label'] ?? '').toString();
     return BottomNavigationItemConfig(
@@ -634,7 +743,8 @@ class RouteConfig {
     if (json is String) {
       return RouteConfig(pageId: json);
     }
-    final map = json as Map<String, dynamic>? ?? <String, dynamic>{};
+    final Map<String, dynamic> map =
+        (json is Map<String, dynamic>) ? json : <String, dynamic>{};
     return RouteConfig(
       pageId: map['pageId'] ?? '',
       auth: map['auth'],
@@ -1241,7 +1351,8 @@ class ActionConfig {
     if (json == null) return ActionConfig(action: 'none');
     if (json is String) return ActionConfig(action: json);
 
-    final map = json as Map<String, dynamic>;
+    final Map<String, dynamic> map =
+        (json is Map<String, dynamic>) ? json : <String, dynamic>{};
     return ActionConfig(
       action: map['action'] ?? 'none',
       params: map['params'],
@@ -1271,16 +1382,28 @@ class StateConfig {
 
   factory StateConfig.fromJson(Map<String, dynamic> json) {
     return StateConfig(
-      global: (json['global'] as Map<String, dynamic>? ?? {}).map(
+      global: (json['global'] is Map<String, dynamic>
+              ? json['global'] as Map<String, dynamic>
+              : <String, dynamic>{})
+          .map(
         (key, value) => MapEntry(key, StateFieldConfig.fromJson(value)),
       ),
-      pages: (json['pages'] as Map<String, dynamic>? ?? {}).map(
-        (pageKey, pageValue) => MapEntry(
-          pageKey,
-          (pageValue as Map<String, dynamic>).map(
-            (key, value) => MapEntry(key, StateFieldConfig.fromJson(value)),
-          ),
-        ),
+      pages: (json['pages'] is Map<String, dynamic>
+              ? json['pages'] as Map<String, dynamic>
+              : <String, dynamic>{})
+          .map(
+        (pageKey, pageValue) {
+          final Map<String, dynamic> pageMap =
+              (pageValue is Map<String, dynamic>)
+                  ? pageValue
+                  : <String, dynamic>{};
+          return MapEntry(
+            pageKey,
+            pageMap.map(
+              (key, value) => MapEntry(key, StateFieldConfig.fromJson(value)),
+            ),
+          );
+        },
       ),
     );
   }
@@ -1346,9 +1469,12 @@ class EventsActionsConfig {
                   .map((e) => ActionConfig.fromJson(e))
                   .toList()
               : null,
-      actions: (json['actions'] as Map<String, dynamic>? ?? {}).map(
-        (key, value) => MapEntry(key, ActionDefinitionConfig.fromJson(value)),
-      ),
+      actions: (json['actions'] is Map<String, dynamic>)
+          ? (json['actions'] as Map<String, dynamic>).map(
+              (key, value) =>
+                  MapEntry(key, ActionDefinitionConfig.fromJson(value)),
+            )
+          : <String, ActionDefinitionConfig>{},
     );
   }
 }
@@ -1381,7 +1507,10 @@ class ThemingAccessibilityConfig {
 
   factory ThemingAccessibilityConfig.fromJson(Map<String, dynamic> json) {
     return ThemingAccessibilityConfig(
-      tokens: (json['tokens'] as Map<String, dynamic>? ?? {}).map((key, value) {
+      tokens: (json['tokens'] is Map<String, dynamic>
+              ? json['tokens'] as Map<String, dynamic>
+              : <String, dynamic>{})
+          .map((key, value) {
         if (value is Map) {
           final mapped = value.map(
             (k, v) => MapEntry(k.toString(), v?.toString() ?? ''),
@@ -1391,7 +1520,10 @@ class ThemingAccessibilityConfig {
         // Fallback to empty map if token section is invalid
         return MapEntry(key, <String, String>{});
       }),
-      typography: (json['typography'] as Map<String, dynamic>? ?? {}).map(
+      typography: (json['typography'] is Map<String, dynamic>
+              ? json['typography'] as Map<String, dynamic>
+              : <String, dynamic>{})
+          .map(
         (key, value) => MapEntry(key, TypographyConfig.fromJson(value)),
       ),
       accessibility: AccessibilityConfig.fromJson(json['accessibility'] ?? {}),
@@ -1464,9 +1596,15 @@ class AssetsConfig {
   });
 
   factory AssetsConfig.fromJson(Map<String, dynamic> json) {
+    final dynamic iconsRaw = json['icons'];
+    final Map<String, dynamic> iconsMap =
+        (iconsRaw is Map && iconsRaw['mapping'] is Map<String, dynamic>)
+            ? iconsRaw['mapping'] as Map<String, dynamic>
+            : <String, dynamic>{};
+
     return AssetsConfig(
       images: json['images'] ?? {},
-      icons: ((json['icons']?['mapping'] as Map<String, dynamic>? ?? {})).map(
+      icons: iconsMap.map(
         (k, v) => MapEntry(k, v?.toString() ?? ''),
       ),
       fonts: json['fonts'] ?? {},
@@ -1504,10 +1642,16 @@ class ValidationsConfig {
 
   factory ValidationsConfig.fromJson(Map<String, dynamic> json) {
     return ValidationsConfig(
-      rules: (json['rules'] as Map<String, dynamic>? ?? {}).map(
+      rules: (json['rules'] is Map<String, dynamic>
+              ? json['rules'] as Map<String, dynamic>
+              : <String, dynamic>{})
+          .map(
         (key, value) => MapEntry(key, ValidationRuleConfig.fromJson(value)),
       ),
-      crossField: (json['crossField'] as Map<String, dynamic>? ?? {}).map(
+      crossField: (json['crossField'] is Map<String, dynamic>
+              ? json['crossField'] as Map<String, dynamic>
+              : <String, dynamic>{})
+          .map(
         (key, value) =>
             MapEntry(key, CrossFieldValidationConfig.fromJson(value)),
       ),
@@ -1567,10 +1711,16 @@ class PermissionsFlagsConfig {
 
   factory PermissionsFlagsConfig.fromJson(Map<String, dynamic> json) {
     return PermissionsFlagsConfig(
-      roles: (json['roles'] as Map<String, dynamic>? ?? {}).map(
+      roles: (json['roles'] is Map<String, dynamic>
+              ? json['roles'] as Map<String, dynamic>
+              : <String, dynamic>{})
+          .map(
         (key, value) => MapEntry(key, RoleConfig.fromJson(value)),
       ),
-      featureFlags: (json['featureFlags'] as Map<String, dynamic>? ?? {}).map(
+      featureFlags: (json['featureFlags'] is Map<String, dynamic>
+              ? json['featureFlags'] as Map<String, dynamic>
+              : <String, dynamic>{})
+          .map(
         (key, value) => MapEntry(key, FeatureFlagConfig.fromJson(value)),
       ),
     );

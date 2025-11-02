@@ -158,6 +158,14 @@ class ParsingUtils {
     return CupertinoColors.systemBlue;
   }
 
+  /// Parse color but return null when input is null/empty.
+  /// Useful for components that should inherit theme defaults
+  /// instead of forcing a fallback color.
+  static Color? parseColorOrNull(String? colorString) {
+    if (colorString == null || colorString.isEmpty) return null;
+    return parseColor(colorString);
+  }
+
   /// Parse button style from string
   static Widget styleButton(Widget button, String? style) {
     if (style == null) return button;
@@ -332,6 +340,18 @@ class ParsingUtils {
         return CupertinoIcons.search;
       case 'ellipsis':
         return CupertinoIcons.ellipsis;
+
+      // Media
+      case 'music':
+      case 'library_music':
+      case 'audiotrack':
+        return CupertinoIcons.music_note;
+      case 'podcast':
+      case 'podcasts':
+        return CupertinoIcons.mic;
+      case 'audiobook':
+      case 'audiobooks':
+        return CupertinoIcons.book;
 
       // Navigation chevrons
       case 'chevron_right':

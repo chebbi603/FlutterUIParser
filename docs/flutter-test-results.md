@@ -1,6 +1,257 @@
 Project: demo_json_parser (Flutter)
-# Test Results — 2025-11-01
-Latest run: see `docs/history/flutter-test-results-run23.md` for details.
+# Test Results — 2025-11-02
+Latest run: see `docs/history/flutter-test-results-run55.md` for details.
+
+## Summary (Run 55 — MVP public events ingestion)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 44 tests
+- Duration: ~3s
+
+## Context
+- Backend changed: event ingestion endpoints (`POST /events`, `POST /events/tracking-event`) are public in MVP.
+- No Flutter code changes required; `AnalyticsService.flush()` continues to include `Authorization` when available, but backend accepts requests without it.
+- Navigation-triggered immediate flush behavior remains the same.
+
+## Notable Output (truncated)
+```
+00:03 +44: All tests passed!
+```
+## Summary (Run 56 — Public analytics endpoints optional auth header)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 44 tests
+- Duration: ~3s
+
+## Context
+- Verified documentation alignment: analytics ingestion endpoints are public; Authorization header is optional.
+- No Flutter code changes required; `AnalyticsService.flush()` includes `Authorization` only when a token is present.
+- Debug logs continue to show tracked events and baseline behaviors in tests.
+
+## Notable Output (truncated)
+```
+00:03 +44: All tests passed!
+📊 Tracked: tap (component=x, page=null, scope=public, ...)
+📊 Tracked: pageEnter / pageExit events in EnhancedPageBuilder
+```
+
+## Summary (Run 53 — Bottom navigation analytics tracking)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 44 tests
+- Duration: ~3s
+
+## Context
+- Implemented automatic tracking for bottom navigation taps via a one-time `CupertinoTabController` listener in `lib/app.dart`.
+- Events use `TrackingEventType.routeChange` (mapped to `navigate`) and include stable `componentId` and `pageId`.
+- No visual changes; analytics now records nav selections reliably.
+
+## Notable Output (truncated)
+```
+00:03 +44: All tests passed!
+```
+
+## Summary (Run 52 — Local port normalization)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 44 tests
+- Duration: ~3s
+
+## Context
+- Implemented defensive normalization for local development:
+  - Map `http://localhost:8082` → `http://localhost:8081` in `main.dart`.
+  - Normalize analytics `backendUrl` to ensure `/events` path and port `8081` for localhost.
+- Purpose: prevent misconfigured `.env` values from breaking backend connectivity without changing environment files.
+
+## Notable Output (truncated)
+```
+00:03 +44: All tests passed!
+```
+
+## Summary (Run 50 — Routine verification and coverage)
+- Command: `flutter test --coverage`
+- Result: All tests passed
+- Total: 44 tests
+- Duration: ~5s
+
+## Context
+- Routine regression run to verify analytics-related tests and overall stability.
+- Confirmed behavior: when `backendUrl` is not configured, analytics flush defers and keeps events in memory (debug logs present).
+- Coverage artifact written to `coverage/lcov.info` for CI aggregation.
+
+## Notable Output (truncated)
+```
+00:05 +44: All tests passed!
+📊 Tracked: tap (component=x, page=null, scope=public, ...)
+⚠️ No backendUrl configured; keeping 1 events in memory
+📊 Tracked: pageEnter / pageExit events in EnhancedPageBuilder
+```
+
+## Summary (Run 49 — Debug auto-login for analytics auth + baseline flush)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 44 tests
+- Duration: ~3s
+
+## Context
+- Implemented debug-only auto-login in `app.dart` using `.env` keys `DEBUG_AUTO_LOGIN`, `DEBUG_EMAIL`, and `DEBUG_PASSWORD` to obtain a JWT at startup in debug builds.
+- This, combined with the previously added Authorization header, ensures analytics flushes include JWT in debug sessions.
+- Kept the 2-second delayed baseline flush in debug to quickly verify ingestion.
+
+## Notable Output (truncated)
+```
+00:03 +44: All tests passed!
+📊 Tracked: pageEnter (component=null, page=page1, scope=public, ...)
+📊 Tracked: tap (component=btn1, page=page1, scope=public, ...)
+```
+
+## Summary (Run 48 — Analytics auth header + debug baseline flush)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 44 tests
+- Duration: ~3s
+
+## Context
+- Added Authorization header to analytics `flush()` and `flushPublicBaseline()` when `authToken` exists in global state.
+- Added a debug-only delayed baseline flush on app startup to send initial public events (e.g., `landing_page_viewed`) for quick verification.
+- No UI changes; behavior only affects analytics network calls in debug.
+
+## Notable Output (truncated)
+```
+00:03 +44: All tests passed!
+📊 Tracked: pageEnter (component=null, page=page1, scope=public, ...)
+📊 Tracked: tap (component=btn1, page=page1, scope=public, ...)
+```
+
+## Summary (Run 25)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 39 tests
+- Duration: ~3s
+
+## Context
+- Normalized endpoint alias keys in `EndpointConfig.fromJson`:
+  - `authRequired`/`requiresAuth` → `auth`
+  - `params` → `queryParams`
+  - `retry` → `retryPolicy`
+- Added unit tests validating alias handling: `test/models/endpoint_config_aliases_test.dart`.
+- No UI changes; parser behavior is more robust and consistent.
+
+## Notable Output (truncated)
+```
+00:03 +39: All tests passed!
+```
+
+## Summary (Run 40 — Button text color precedence)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 39 tests
+- Duration: ~3s
+
+## Context
+- Button component updated to prioritize `style.color` for text, then `style.foregroundColor`, with token fallbacks to `${theme.onPrimary}` and `${theme.onSurface}` based on background.
+- Documentation updated in `docs/style-tokens-and-overrides.md` under “Button Color Precedence”.
+
+## Notable Output (truncated)
+```
+00:03 +39: All tests passed!
+```
+
+## Summary (Run 27 — Theming token parsing alignment, system→light mapping)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 39 tests
+- Duration: ~2s
+
+## Context
+- Color parsing updated to avoid forced blue fallback:
+  - `ComponentStyleUtils._parseColor` and `IconComponent` now use `ParsingUtils.parseColorOrNull`.
+  - Factory `_parseColor` also switched to `parseColorOrNull` after resolving tokens.
+- App theme alignment:
+  - When global `theme=system`, use `light` token map by default.
+- Documentation updated:
+  - `docs/style-tokens-and-overrides.md` clarifies nullable color fallback and system→light mapping.
+
+## Notable Output (truncated)
+```
+00:03 +39: All tests passed!
+```
+
+## Summary (Run 41 — Grid static itemBuilder support)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 40 tests
+- Duration: ~3s
+
+## Context
+- Grid component updated to render static data via `dataSource.type: "static"` with `items` and `itemBuilder`.
+- Added widget test `test/widgets/grid_static_itembuilder_test.dart` verifying `${item.title}` resolves and renders.
+
+## Notable Output (truncated)
+```
+00:03 +40: All tests passed!
+```
+
+## Summary (Run 45 — Map cast hardening and robustness tests)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 44 tests
+- Duration: ~3s
+
+## Context
+- Hardened parsing across the app to avoid `String is not a subtype of Map<String, dynamic>` exceptions.
+- Changes include:
+  - Guard `ApiService` response schema properties with `is Map<String, dynamic>` checks.
+  - Guard `TrackingEvent.fromJson` `data` and `context` fields against non-map values.
+  - Guard `EventsActionsConfig.fromJson` `actions` mapping with `is Map` checks.
+  - Fixed `AssetsConfig.fromJson` icons mapping syntax and safe extraction.
+- Added unit tests:
+  - `test/models/pages_ui_config_parsing_test.dart` (non-map `routes`/`pages`).
+  - `test/services/tracking_event_parsing_test.dart` (non-map `data`/`context`).
+  - `test/models/events_actions_config_parsing_test.dart` (non-map `actions`).
+
+## Notable Output (truncated)
+```
+00:03 +44: All tests passed!
+```
+
+## Summary (Run 46 — UI polish: spacing and duration binding fix)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 44 tests
+- Duration: ~3s
+
+## Context
+- Canonical contract updates focused on visual polish and safe bindings:
+  - Music page: added page padding, item margins, surface background, rounded corners.
+  - Fixed invalid string interpolation for duration by introducing `durationText` in static data (e.g., `3:45`).
+  - Podcasts page: added page padding and grid gap for consistent spacing.
+  - Audiobooks page: added page padding for consistent insets.
+- No parser changes; UI renders cleaner and avoids text overflow.
+
+## Notable Output (truncated)
+```
+00:03 +44: All tests passed!
+```
+
+## Summary (Run 47 — Songs Row Overflow Fix)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 44 tests
+- Duration: ~3s
+
+## Context
+- Canonical contract updated to prevent row overflow in Songs list:
+  - `title` and `subtitle` set `maxLines: 1` and `overflow: "ellipsis"`.
+  - `durationText` set `maxLines: 1`.
+  - Play `icon` size reduced from `32` → `24`.
+- Backend verified to serve updated contract (`/contracts/public/canonical`).
+- Parser unchanged; UI renders cleaner with stable truncation.
+
+## Notable Output (truncated)
+```
+00:03 +44: All tests passed!
+```
 
 ## Summary (Run 17)
 - Command: `flutter test`
@@ -208,6 +459,23 @@ Failing: /test/providers/contract_provider_test.dart: ContractProvider refreshCo
 ```
 00:02 +17: All tests passed!
 ```
+
+## Summary (Run 27 — UI polish: icons, colors, lists, images)
+- Command: `flutter test -r compact`
+- Result: All tests passed
+- Total: 39 tests
+- Duration: ~3s
+
+## Context
+- Extended `ParsingUtils.parseIcon` to support `music`, `podcast(s)`, and `audiobook(s)` icon names used by bottom navigation.
+- Introduced `ParsingUtils.parseColorOrNull` and updated `ButtonComponent` to use it for `backgroundColor` and `foregroundColor`, avoiding unintended blue text fallback and allowing Cupertino defaults.
+- Added default horizontal padding to non-virtual `EnhancedListWidget` lists (`16px`) while honoring explicit `style.padding` when provided.
+- Implemented empty `src` guard and `errorBuilder` fallback in `NetworkOrAssetImage` to prevent asset-not-found errors and render a neutral placeholder.
+
+## Notable Output (truncated)
+```
+00:03 +39: All tests passed!
+```
  
 ## Summary (Run 7)
 - Command: `flutter test`
@@ -312,6 +580,26 @@ Failing: /test/providers/contract_provider_test.dart: ContractProvider refreshCo
 - Ensures the app reads contracts from the configured backend without requiring rebuilds when changing `.env`.
 - No behavioral changes to provider/service logic; validation and debounce remained intact.
 
+## Summary (Run 16)
+- Date: 2025-11-02
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 44 tests
+- Duration: ~3s
+
+## Context
+- Event enrichment fields (`pageScope`, `contractType`, `contractVersion`, `isPersonalized`, `userId`) confirmed across analytics tests.
+- EnhancedPageBuilder emits diagnostics for page/component creation in debug runs; no release impact.
+- Flush behavior: retains events when `backendUrl` is not configured (by design).
+
+## Notable Output (truncated)
+```
+[diag][page] enter id=page1 layout=column components=2 bg=-
+📊 Tracked: tap (component=btn1, page=page1, scope=public, ...)
+📊 Tracked: pageExit (component=null, page=page1, scope=public, ...)
+00:03 +44: All tests passed!
+```
+
 ## Notable Output (truncated)
 ```
 00:01 +31: All tests passed!
@@ -403,4 +691,84 @@ Failing: /test/providers/contract_provider_test.dart: ContractProvider refreshCo
 [diag][component] Create type=textButton id=btn1
 [diag][component] Create type=text id=txt1
 00:03 +33: All tests passed!
+```
+## Summary (Run 23)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 37 tests
+- Duration: ~3s
+
+## Context
+- Parser updated to accept field name strings in `DataModel.fields` lists and `name:type` shorthand.
+- Added unit tests covering `FieldConfig` type string/list shorthand, `DataModel` fields list handling, relationships string shorthand, and index string shorthand.
+
+## Notable Output (truncated)
+```
+00:03 +37: All tests passed!
+```
+## Summary (Run 24)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 37 tests
+- Duration: ~3s
+
+## Context
+- Docs cleanup: added `docs/flutter-building_contracts_guide.md` as the single canonical guide for authoring and delivering contracts; linked from README.
+- No code changes affecting runtime behavior.
+
+## Notable Output (truncated)
+```
+00:03 +37: All tests passed!
+```
+## Test Run - 2025-11-02
+
+- Command: `flutter test`
+- Outcome: All tests passed
+- Duration: ~3 seconds
+
+Highlights:
+- AnalyticsService events tracked for taps and pageEnter/pageExit.
+- ComponentFactory and PageBuilder tests succeeded (`+39` tests reported).
+
+Relevant Logs (truncated):
+
+```
+📊 Tracked: pageEnter (component=null, page=page1, scope=public, tag=null, contractType=unknown, version=unknown, personalized=false, user=null)
+📊 Tracked: tap (component=btn1, page=page1, scope=public, tag=null, contractType=unknown, version=unknown, personalized=false, user=null)
+📊 Tracked: pageExit (component=null, page=page1, scope=public, tag=null, contractType=unknown, version=unknown, personalized=false, user=null)
+00:03 +39: All tests passed!
+```
+## Summary (Run 51 — DTO alignment for backend ingestion)
+- Command: `flutter test --coverage`
+- Result: All tests passed
+- Total: 44 tests
+- Duration: ~4–5s
+
+## Context
+- Updated `AnalyticsService` to produce NestJS-compatible payloads:
+  - Wrap body in `{events: [...]}`
+  - Use ISO timestamps
+  - Map `TrackingEventType` to allowed values
+  - Move metadata under `data`; only include valid `sessionId`
+- Manual `curl` post to `/events` returned `{ inserted: 1 }`.
+- Aggregate stats for `page=debug` reflected the inserted event.
+
+## Notable Output (truncated)
+```
+00:04 +44: All tests passed!
+```
+## Summary (Run 54 — Immediate flush on bottom nav changes)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 44 tests
+- Duration: ~3s
+
+## Context
+- Added immediate `AnalyticsService().flush()` call after tracking `routeChange` in the `CupertinoTabController` listener within `lib/app.dart`.
+- Ensures bottom navigation taps trigger an API call without delay; backend receives `eventType: 'navigate'` with stable `componentId` and `pageId`.
+- No visual changes; behavior affects analytics network calls only.
+
+## Notable Output (truncated)
+```
+00:03 +44: All tests passed!
 ```

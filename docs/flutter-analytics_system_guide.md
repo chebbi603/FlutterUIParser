@@ -58,6 +58,18 @@ Page navigation can be tracked via:
 AnalyticsService().trackPageNavigation(pageId: 'login', eventType: TrackingEventType.pageEnter);
 ```
 
+Bottom navigation taps are tracked automatically:
+- Implemented via a one-time `CupertinoTabController` listener inside `app.dart`.
+- Events use `TrackingEventType.routeChange` (mapped to `navigate`).
+- `componentId` is generated as `bottom_nav_item_<index>_<route|pageId|title>` and includes the active `pageId`.
+- No contract changes required; tracking is automatic when bottom navigation is present.
+
+### Immediate Flush on Navigation
+- After tracking a tab change, the app calls `AnalyticsService().flush()` to immediately send events.
+- If `backendUrl` is unset, `flush()` logs and keeps events queued in memory (debug builds).
+- When authenticated, `flush()` includes `Authorization: Bearer <token>` automatically.
+- MVP mode: Authentication is optional for `/events`; the backend accepts flushes without `Authorization`.
+
 ## Document Conventions
 - Headings use Title Case.
 - Timestamps: docs use ISO 8601 dates; analytics payloads use milliseconds since epoch.

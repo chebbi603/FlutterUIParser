@@ -13,6 +13,18 @@ This document summarizes key implementation details, algorithms, and file refere
 - `_hashChipConfig(config)` computes a stable hash that ignores volatile fields; the built widget is stored under that hash in `_componentCache`.
 - `createComponent` resolves theme tokens, validates permissions, and delegates to specific `_create*` methods per component type.
 
+## Grid & ItemBuilder
+
+- File: `lib/widgets/component_factory.dart`
+- Behavior:
+  - Supports two modes:
+    - Static children grid: renders `children` directly.
+    - Static data grid: when `dataSource.type` is `static` (or `dataSource.items` provided) and `itemBuilder` is set, it maps `items` to widgets using `itemBuilder`.
+  - Template tokens inside `itemBuilder` (e.g., `${item.title}`, `${item.imageUrl}`) are resolved by the respective component builders (`TextComponent`, `ImageComponent`) using `config.boundData` passed from the grid.
+  - Layout: uses `GridView.count` with `columns` mapped to `crossAxisCount` and `spacing` applied as both `crossAxisSpacing` and `mainAxisSpacing`.
+- Limitations:
+  - Only static data is supported for grids at present; remote/dynamic fetching and pagination are not implemented in Flutter.
+
 ## Graph Engine
 
 - File: `lib/engine/graph_engine.dart`
@@ -112,3 +124,15 @@ This document summarizes key implementation details, algorithms, and file refere
 - Contract Service (`lib/services/contract_service.dart`):
   - Logs concise summaries on successful fetches (source, version, page/route counts).
   - Detects merge metadata (`mergeMetadata`, `isPartial`, `mergedPages`) and prints counts; `verboseMergeLogging` shows page IDs in debug builds.
+
+## Parser Enhancements (2025-11-02)
+
+- DataModel field parsing now supports flexible shorthand inputs:
+  - Map entries: `{ "name": "id", "type": "string" }` or `{ "id": { "type": "string" } }`.
+  - Bare field names in lists: `["title", "description"]` become `string` fields by default.
+  - `name:type` list entries: `["priority:string", "rating:number"]`.
+  - Enum shorthand lists: `["pending", "done"]` parsed as `type=string`, `enum=[...]`.
+- Relationships accept string shorthand for model names (defaults to `hasOne`) or detailed maps.
+- Index definitions accept string shorthand (e.g., `"unique:id"`, `"status"`) or detailed maps.
+- Type normalization recognizes synonyms: `int/integer`, `bool/boolean`, `map/object`, `list/array`, `float/double -> number`.
+- Defensive parsing and sensible defaults reduce the chances of type errors when contracts use compact forms.

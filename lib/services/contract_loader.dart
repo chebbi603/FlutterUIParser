@@ -230,8 +230,12 @@ class ContractLoader {
 
   String? _extractVersion(dynamic raw) {
     try {
-      final meta = (raw as Map)['meta'] as Map?;
-      return meta?['version']?.toString();
+      if (raw is Map) {
+        final dynamic metaRaw = raw['meta'];
+        final Map? meta = metaRaw is Map ? metaRaw : null;
+        return meta?['version']?.toString();
+      }
+      return null;
     } catch (_) {
       return null;
     }

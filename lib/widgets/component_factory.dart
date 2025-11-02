@@ -408,7 +408,8 @@ class EnhancedComponentFactory {
     if (colorString == null || colorString.isEmpty) return null;
     // Resolve any theme tokens before parsing.
     final resolved = resolveToken(colorString);
-    return ParsingUtils.parseColor(resolved);
+    // Use nullable parsing to avoid unintended blue fallbacks
+    return ParsingUtils.parseColorOrNull(resolved);
   }
 
   static FontWeight _parseFontWeight(String? weight) {
@@ -578,24 +579,23 @@ class EnhancedComponentFactory {
         child: content,
       );
 
-      Widget material = Material(
+      // Place InkWell inside Material so it has a Material ancestor
+      final contentWithTap = (config.onTap != null)
+          ? InkWell(
+              onTap: () {
+                EnhancedActionDispatcher.execute(context, config.onTap!, {});
+              },
+              child: inner,
+            )
+          : inner;
+
+      return Material(
         color: gradient == null ? baseColor : Colors.transparent,
         elevation: elevation,
         borderRadius: BorderRadius.circular(borderRadius),
         clipBehavior: clip,
-        child: inner,
+        child: contentWithTap,
       );
-
-      if (config.onTap != null) {
-        material = InkWell(
-          onTap: () {
-            EnhancedActionDispatcher.execute(context, config.onTap!, {});
-          },
-          child: material,
-        );
-      }
-
-      return material;
     });
   }
 
@@ -604,10 +604,31 @@ class EnhancedComponentFactory {
   }
 
   static Widget _createGrid(EnhancedComponentConfig config) {
-    final children =
-        config.children?.map((child) => createComponent(child)).toList() ?? [];
+    // Support two modes:
+    // 1) Static children grid (existing behavior)
+    // 2) Data-driven grid using dataSource.items + itemBuilder (static only)
+    List<Widget> children = [];
     final columns = config.columns ?? 2;
     final spacing = config.spacing ?? 8.0;
+
+    final hasItemBuilder = config.itemBuilder != null;
+    final isStaticData =
+        (config.dataSource?.type?.toLowerCase() == 'static') ||
+        (config.dataSource?.items != null);
+
+    if (hasItemBuilder && isStaticData) {
+      final items = config.dataSource?.items ?? const <dynamic>[];
+      children = items
+          .map((item) =>
+              createComponent(config.itemBuilder!.copyWith(boundData: item)))
+          .toList();
+    } else {
+      children = config.children
+              ?.map((child) =>
+                  createComponent(child.copyWith(boundData: config.boundData)))
+              .toList() ??
+          [];
+    }
 
     return GridView.count(
       crossAxisCount: columns,
@@ -621,7 +642,11 @@ class EnhancedComponentFactory {
 
   static Widget _createRow(EnhancedComponentConfig config) {
     final children =
-        config.children?.map((child) => createComponent(child)).toList() ?? [];
+        config.children
+                ?.map((child) =>
+                    createComponent(child.copyWith(boundData: config.boundData)))
+                .toList() ??
+            [];
 
     return Row(
       mainAxisAlignment: _parseMainAxisAlignment(config.mainAxisAlignment),
@@ -632,7 +657,11 @@ class EnhancedComponentFactory {
 
   static Widget _createColumn(EnhancedComponentConfig config) {
     final children =
-        config.children?.map((child) => createComponent(child)).toList() ?? [];
+        config.children
+                ?.map((child) =>
+                    createComponent(child.copyWith(boundData: config.boundData)))
+                .toList() ??
+            [];
 
     return Column(
       mainAxisAlignment: _parseMainAxisAlignment(config.mainAxisAlignment),
@@ -673,7 +702,11 @@ class EnhancedComponentFactory {
 
   static Widget _createConstrained(EnhancedComponentConfig config) {
     final children =
-        config.children?.map((child) => createComponent(child)).toList() ?? [];
+        config.children
+                ?.map((child) =>
+                    createComponent(child.copyWith(boundData: config.boundData)))
+                .toList() ??
+            [];
     final child = children.length == 1
         ? children.first
         : Column(
@@ -706,7 +739,11 @@ class EnhancedComponentFactory {
 
   static Widget _createAligned(EnhancedComponentConfig config) {
     final children =
-        config.children?.map((child) => createComponent(child)).toList() ?? [];
+        config.children
+                ?.map((child) =>
+                    createComponent(child.copyWith(boundData: config.boundData)))
+                .toList() ??
+            [];
     final content = Row(
       mainAxisAlignment: _parseMainAxisAlignment(config.mainAxisAlignment),
       crossAxisAlignment: _parseCrossAxisAlignment(config.crossAxisAlignment),
@@ -722,7 +759,9 @@ class EnhancedComponentFactory {
 
   static Widget _createAspectRatio(EnhancedComponentConfig config) {
     final child = config.children?.isNotEmpty == true
-        ? createComponent(config.children!.first)
+        ? createComponent(
+            config.children!.first.copyWith(boundData: config.boundData),
+          )
         : const SizedBox.shrink();
     final ratio = config.aspectRatio ?? 1.0;
     Widget content = AspectRatio(aspectRatio: ratio, child: child);
@@ -736,7 +775,9 @@ class EnhancedComponentFactory {
   static Widget _createCenter(EnhancedComponentConfig config) {
     final child =
         config.children?.isNotEmpty == true
-            ? createComponent(config.children!.first)
+            ? createComponent(
+                config.children!.first.copyWith(boundData: config.boundData),
+              )
             : const SizedBox.shrink();
 
     return Center(child: child);
@@ -1010,11 +1051,18 @@ class _EnhancedListWidgetState extends State<EnhancedListWidget> {
       );
     }
 
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: totalCount,
-      itemBuilder: _buildListItem,
+    final EdgeInsets listPadding =
+        widget.config.style?.padding?.toEdgeInsets() ??
+        const EdgeInsets.symmetric(horizontal: 16.0);
+
+    return Padding(
+      padding: listPadding,
+      child: ListView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: totalCount,
+        itemBuilder: _buildListItem,
+      ),
     );
   }
 

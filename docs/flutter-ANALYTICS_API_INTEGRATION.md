@@ -42,43 +42,62 @@ Behavior:
 - On 2xx response, events are cleared.
 - On non‑2xx or error, events are retained for later flushes.
 
-## HTTP Contract
+## HTTP Contract (NestJS DTO Compatible)
 
 Request:
 
 - Method: `POST`
-- URL: `backendUrl`
+- URL: `backendUrl` (typically `/events`)
 - Headers: `Content-Type: application/json`
 - Body:
 
 ```json
-[
-  {
-    "timestamp": 1681836102000,
-    "componentId": "login_button",
-    "eventType": "tap"
-  },
-  {
-    "timestamp": 1681836102500,
-    "componentId": "login_form",
-    "eventType": "formSubmit",
-    "result": "fail",
-    "error": "Invalid credentials",
-    "tag": "rapid_repeat",
-    "repeatCount": 3
-  }
-]
+{
+  "events": [
+    {
+      "timestamp": "2025-11-02T15:35:00.000Z",
+      "componentId": "login_button",
+      "eventType": "tap",
+      "page": "auth",
+      "data": {
+        "pageScope": "public",
+        "contractType": "canonical",
+        "contractVersion": "v1",
+        "isPersonalized": false
+      }
+    },
+    {
+      "timestamp": "2025-11-02T15:35:02.000Z",
+      "componentId": "login_form",
+      "eventType": "input",
+      "page": "auth",
+      "data": {
+        "pageScope": "public",
+        "result": "fail",
+        "error": "Invalid credentials",
+        "tag": "rapid_repeat",
+        "repeatCount": 3
+      }
+    }
+  ]
+}
 ```
 
-### Event Format
+### Event DTO Fields
 
-- `timestamp`: ms since epoch
-- `componentId`: string
-- `eventType`: string
-- `tag`: optional (`rage_click` | `rapid_repeat`)
-- `repeatCount`: optional integer when a tag applies
-- `result`: for `formSubmit` only (`success` | `fail`)
-- `error`: optional string for failed submissions
+- `timestamp`: ISO 8601 date-time string
+- `componentId`: string (required)
+- `eventType`: one of `tap | view | input | navigate | error | form-fail`
+- `page`: optional page identifier
+- `sessionId`: optional string (only set when it is a valid 24-hex ObjectId)
+- `data`: optional object containing metadata and tags
+
+### Event Type Mapping
+
+- Interactions: `tap` → `tap`; `scroll|swipe|componentRender|apiCall` → `view`
+- Inputs: `focus|blur|input|stateChange|formSubmit` → `input`
+- Navigation: `pageEnter|pageExit|routeChange|networkChange|appBackground|appForeground` → `navigate`
+- Errors: `validationError|error` → `error`
 
 ### Client-Side Tagging
 
@@ -119,6 +138,6 @@ AnalyticsService().updateTaggingConfig(
 ## Document Conventions
 
 - Headings use Title Case across sections.
-- Timestamps: docs use ISO 8601 for dates; payloads use milliseconds since epoch.
+- Timestamps: payloads use ISO 8601 date-time strings.
 - Terminology: `componentId`, `eventType`, `backendUrl` are used consistently.
 - Code and JSON examples are illustrative; adapt URLs and IDs to your environment.

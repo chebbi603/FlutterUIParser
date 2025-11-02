@@ -102,6 +102,7 @@ The canonical contract is served by your backend; update it on the server and us
 - **[Contract Validator Usage](docs/contract_validator_usage.md)**: How to validate contracts and use the CLI
 - **[Contract Refresh Mechanism](docs/contract_refresh_mechanism.md)**: Provider-based pull-to-refresh and runtime updates
 - **[Analytics Backend Configuration](docs/analytics_backend_configuration.md)**: Configure analytics via contract and verify flush in debug
+ - **[Building Contracts (Start Here)](docs/flutter-building_contracts_guide.md)**: Single guide to author, validate, and deliver JSON contracts
 
 ## 🔌 Backend Integration
 

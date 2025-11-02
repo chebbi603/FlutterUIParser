@@ -38,7 +38,7 @@ Example (truncated):
 ```
 
 ## 2. Personalized Contract Delivery
-- Endpoint: `GET /users/{userId}/contract` (requires JWT)
+ - Endpoint: `GET /users/{userId}/contract` (may require JWT depending on backend config)
 - Headers: `Authorization: Bearer <token>` and `Accept: application/json`
 - Responses:
   - `200` → personalized contract payload (same shape as canonical)
@@ -117,10 +117,10 @@ Use a consistent error shape to simplify UI handling and analytics.
 - For form submissions, include `error.message` to be linked with analytics events when `result: "fail"`.
 
 ## 6. Authentication
-Bearer token authentication is supported.
+Bearer token authentication is supported for protected endpoints; public endpoints do not require headers.
 
 - Login flow: Backend issues an access token (e.g., `POST /auth/login`).
-- Frontend sets header: `Authorization: Bearer <token>`.
+- Frontend sets header: `Authorization: Bearer <token>` only when the endpoint is protected.
 - Token refresh: Expose `POST /auth/refresh` if needed; contract can define actions to call it.
  - Response fields (login): `{ "_id": "...", "role": "USER", "username": "user", "name": "User Name", "accessToken": "...", "refreshToken": "..." }`
  - Client state mapping: On successful login, the Flutter client stores:

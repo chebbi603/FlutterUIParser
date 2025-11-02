@@ -72,8 +72,13 @@ class AuthGate {
     try {
       final map = _contractProvider?.contract;
       if (map is Map<String, dynamic>) {
-        final pagesUi = map['pagesUI'] as Map<String, dynamic>?;
-        final routes = pagesUi != null ? pagesUi['routes'] as Map<String, dynamic>? : null;
+        final Map<String, dynamic>? pagesUi =
+            map['pagesUI'] is Map<String, dynamic>
+                ? map['pagesUI'] as Map<String, dynamic>
+                : null;
+        final Map<String, dynamic>? routes = pagesUi != null && pagesUi['routes'] is Map<String, dynamic>
+            ? pagesUi['routes'] as Map<String, dynamic>
+            : null;
         final entry = routes != null ? routes[path] : null;
         if (entry is Map<String, dynamic>) {
           final authVal = entry['auth'];

@@ -141,3 +141,56 @@ Example (server‑received event):
   "userId": null
 }
 ```
+
+## Auth Header and Debug Auto-Login
+- Analytics endpoints are public. If an access token is available, the client may attach `Authorization: Bearer <JWT>`; this header is optional.
+- JWT acquisition follows standard app login. For local development, debug auto-login can be enabled via `.env`:
+```
+DEBUG_AUTO_LOGIN=true
+DEBUG_EMAIL=test@example.com
+DEBUG_PASSWORD=password123
+```
+- Behavior:
+  - In debug builds only, if no current auth token exists, the app attempts a login at startup using the above credentials.
+  - On success, subsequent analytics flushes may include the `Authorization` header; for public endpoints this header is optional.
+  - Errors are logged but do not block the UI; you can still navigate and use the app.
+- Seeded backend credentials:
+  - Email: `test@example.com`
+  - Password: `password123`
+  - These are seeded by the NestJS backend when seeding is enabled.
+
+## Startup Baseline Flush (debug-only)
+- In debug builds, the app flushes a small baseline after a short delay (2 seconds) post-startup.
+- Purpose: Allow initial page view events (e.g., landing page) to be tracked and then pushed to the backend for quick verification.
+- This baseline flush only includes public-scope events and is skipped in release builds.
+
+### Public Analytics Endpoints: End-to-End Checklist
+- Start backend with MongoDB configured (`MONGO_URL` in NestJS `.env`).
+- Ensure seeding is enabled (optional) to create the debug user.
+- Verify login route: `POST /auth/login` with body `{ email, password }` returns `accessToken`.
+- Confirm Flutter `.env` has debug auto-login keys and `API_BASE_URL=http://localhost:8081`.
+- Launch the Flutter app (`flutter run`). In logs you should see:
+  - `[Debug] Auto-login succeeded for test@example.com` (or a failure message)
+  - `Analytics configured: http://localhost:8081/events`
+  - Baseline flush attempts shortly after startup.
+- Inspect server logs for `POST /events` (batch) or `POST /events/tracking-event` (single); requests may arrive with or without `Authorization`.
+
+---
+
+## Public Mode — No JWT Required for Event Ingestion or Reads
+
+When running the MVP, the backend accepts analytics events without authentication.
+
+- Backend behavior
+  - `POST /events` and `POST /events/tracking-event` are public.
+  - If unauthenticated, events are stored under a fallback user id.
+  - Aggregation endpoints are public in this refactor.
+
+- Flutter behavior
+  - `AnalyticsService.flush()` will include `Authorization` when a token is present, but this is optional.
+  - No changes are required in the app; if auto-login is disabled, events still ingest successfully.
+
+- Quick check
+  - Launch the app (`flutter run`).
+  - Navigate between bottom tabs to trigger immediate flushes.
+  - Verify backend logs show `POST /events` without `Authorization`.

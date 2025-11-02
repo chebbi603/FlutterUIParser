@@ -28,6 +28,20 @@ Future<void> main() async {
     baseUrl = 'http://localhost:8081';
   }
   baseUrl = baseUrl.trim();
+  // Normalize localhost port to 8081 when misconfigured to 8082
+  try {
+    final uri = Uri.tryParse(baseUrl);
+    if (uri != null) {
+      final isLocalHost = uri.host == 'localhost' || uri.host == '127.0.0.1';
+      if (isLocalHost && uri.port == 8082) {
+        baseUrl = Uri(
+          scheme: uri.scheme.isNotEmpty ? uri.scheme : 'http',
+          host: uri.host,
+          port: 8081,
+        ).toString();
+      }
+    }
+  } catch (_) {}
   // Android emulator requires 10.0.2.2 for host machine
   if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
     final normalizedLocal = baseUrl.replaceAll('127.0.0.1', 'localhost');

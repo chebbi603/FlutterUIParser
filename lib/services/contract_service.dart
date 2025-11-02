@@ -156,7 +156,9 @@ class ContractService {
   /// Extract version from `meta.version`, defaulting to "unknown" if absent.
   String _extractVersion(Map<String, dynamic> contract) {
     try {
-      final meta = contract['meta'] as Map<String, dynamic>?;
+      final dynamic metaRaw = contract['meta'];
+      final Map<String, dynamic>? meta =
+          metaRaw is Map<String, dynamic> ? metaRaw : null;
       final v = meta?['version'];
       if (v is String && v.isNotEmpty) return v;
     } catch (_) {}
@@ -167,9 +169,18 @@ class ContractService {
   void _logContractSummary(String label, Map<String, dynamic> map, ContractSource source, {String? userId}) {
     try {
       final version = _extractVersion(map);
-      final pagesUi = map['pagesUI'] as Map<String, dynamic>? ?? const {};
-      final pages = pagesUi['pages'] as Map<String, dynamic>? ?? const {};
-      final routes = pagesUi['routes'] as Map<String, dynamic>? ?? const {};
+      final Map<String, dynamic> pagesUi =
+          map['pagesUI'] is Map<String, dynamic>
+              ? map['pagesUI'] as Map<String, dynamic>
+              : const {};
+      final Map<String, dynamic> pages =
+          pagesUi['pages'] is Map<String, dynamic>
+              ? pagesUi['pages'] as Map<String, dynamic>
+              : const {};
+      final Map<String, dynamic> routes =
+          pagesUi['routes'] is Map<String, dynamic>
+              ? pagesUi['routes'] as Map<String, dynamic>
+              : const {};
       final userSuffix = userId != null ? ', userId=$userId' : '';
       _log('[$label] source=${source.name}, version=$version, pages=${pages.length}, routes=${routes.length}$userSuffix');
 

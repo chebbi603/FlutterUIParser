@@ -190,11 +190,12 @@ Other root files:
 - `typesafe_contract_guide.md`: Strategies for keeping the contract type-safe.
 - `analytics_system_guide.md`, `ANALYTICS_API_INTEGRATION.md`: Analytics design and backend integration.
 - `framework_implementation_summary.md`: Summary of key modules; note it still references the historic validation module.
-- `contract_audit_report.md`: Findings from contract audits (if populated); may reference validation.
+- `framework_implementation_summary.md`: Summary of key modules; updated to reflect validator removal.
+- `contract_audit_report.md`: Findings from contract audits (if populated); reflects current behavior without runtime validation.
 
-Notes:
+ Notes:
 
-- The previous validation module (`lib/validation/`) and its tooling/docs were removed. Some docs still reference it historically; these will be updated incrementally.
+ - The previous validation module (`lib/validation/`) and its tooling/docs were removed. Documentation has been updated to reflect current behavior without runtime validation.
 
 ### Tests (`test/`)
 
