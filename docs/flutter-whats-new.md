@@ -22,6 +22,7 @@ This document concisely captures the latest feature additions and behavior chang
 ## Navigation Auth Enforcement
 - Wrappers add analytics around login/logout and respect `pagesUI.routes[*].auth`.
 - Emits standardized events (`login_success`, `login_failed`, `logout`).
+- Fix: Logout now reliably redirects to `/login` and clears the navigation stack, even when bottom navigation is disabled.
 - More: see `docs/flutter-navigation_auth_enforcement.md`.
 
 ## Contract Refresh Flow

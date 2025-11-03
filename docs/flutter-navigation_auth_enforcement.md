@@ -16,6 +16,9 @@ Project: demo_json_parser (Flutter)
   - If the route is protected and the user is not authenticated:
     - Emits `logAuthEvent('login_page_viewed', { 'source': 'redirect_from_protected' })`.
     - Switches to `/login` using the tab controller mapping or falls back to navigator.
+ - On explicit logout:
+   - Client clears `authToken`, `refreshToken`, persisted state, and cached contract.
+   - Navigation redirects to `/login` and clears the back stack to prevent returning to protected pages.
 
 ## Authentication Predicate
 - The app wires `NavigationBridge` with two predicates:
@@ -36,3 +39,8 @@ Project: demo_json_parser (Flutter)
 ## Testing
 - Run `flutter test` to verify analytics tagging and navigation wrappers.
 - Test results are logged in `docs/flutter-test-results.md`.
+## Bottom Navigation Visibility
+
+- Bottom navigation is hidden when not authenticated.
+- Contract flag `pagesUI.bottomNavigation.authRequired` controls gating; if omitted, the app defaults to requiring authentication.
+- After logout, the app rebuilds using the canonical contract and hides the bottom navigation until the user logs in again.

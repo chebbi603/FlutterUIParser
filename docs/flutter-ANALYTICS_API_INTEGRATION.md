@@ -55,7 +55,7 @@ Request:
 {
   "events": [
     {
-      "id": "507f1f77bcf86cd799439011",
+      "userId": "507f1f77bcf86cd799439011",
       "timestamp": "2025-11-02T15:35:00.000Z",
       "componentId": "login_button",
       "eventType": "tap",
@@ -69,7 +69,7 @@ Request:
       }
     },
     {
-      "id": "507f1f77bcf86cd799439011",
+      "userId": "507f1f77bcf86cd799439011",
       "timestamp": "2025-11-02T15:35:02.000Z",
       "componentId": "login_form",
       "eventType": "input",
@@ -95,7 +95,7 @@ Request:
 - `page`: optional page identifier
 - `sessionId`: optional string (only set when it is a valid 24-hex ObjectId)
 - `data`: optional object containing metadata and tags
-- `id`: optional top-level user identifier (24-hex ObjectId). When present and valid, the backend attributes the event to this user. The client also mirrors this in `data.userId` for downstream analytics.
+- `userId`: optional top-level user identifier (24-hex ObjectId). When present and valid, the backend attributes the event to this user. In batch payloads, a top-level `userId` can be provided; per-event `userId` overrides the batch value. The client also mirrors this in `data.userId` for downstream analytics, but attribution uses the top-level field.
 
 ### Event Type Mapping
 

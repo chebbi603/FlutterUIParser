@@ -418,6 +418,10 @@ class EnhancedApiService {
               (entry.value is Map<String, dynamic>)
                   ? Map<String, dynamic>.from(entry.value as Map)
                   : <String, dynamic>{};
+          // Only validate properties that are present. Optional fields are allowed to be absent.
+          if (!data.containsKey(key)) {
+            continue;
+          }
           final value = data[key];
           _validateValueAgainstSchema(key, value, propSchema);
         }
@@ -430,6 +434,10 @@ class EnhancedApiService {
     dynamic value,
     Map<String, dynamic> schema,
   ) {
+    // Optional fields: if value is null or not present, skip unless object-level 'required' enforces presence.
+    if (value == null) {
+      return;
+    }
     final type = schema['type'];
     if (type == 'array') {
       if (value is! List) {
@@ -462,7 +470,11 @@ class EnhancedApiService {
     switch (type) {
       case 'string':
         if (value is! String) {
-          throw ApiException('Field "$key" must be string');
+          // Accept common ObjectId-like map shapes by coercing to string
+          final coerced = _coerceStringLike(value);
+          if (coerced == null) {
+            throw ApiException('Field "$key" must be string');
+          }
         }
         break;
       case 'number':
@@ -484,6 +496,21 @@ class EnhancedApiService {
       default:
         break;
     }
+  }
+
+  /// Coerce common ID map shapes (e.g., Mongo ObjectId) into string values.
+  /// Returns the extracted string when possible, otherwise null.
+  String? _coerceStringLike(dynamic value) {
+    if (value is String) return value;
+    if (value is Map) {
+      // Typical keys carrying string identifiers
+      final keys = [r'$oid', 'oid', 'id', 'value', 'string', 'hex', 'hexString'];
+      for (final k in keys) {
+        final v = value[k];
+        if (v is String) return v;
+      }
+    }
+    return null;
   }
 
   void _validateArrayItemsAgainstModel(
@@ -519,7 +546,11 @@ class EnhancedApiService {
       switch (cfg.type) {
         case 'string':
           if (v is! String) {
-            throw ApiException('Field "$key.$fieldName" must be string');
+            // Accept common ObjectId-like map shapes by coercing to string
+            final coerced = _coerceStringLike(v);
+            if (coerced == null) {
+              throw ApiException('Field "$key.$fieldName" must be string');
+            }
           }
           if (cfg.minLength != null && v.length < cfg.minLength!) {
             throw ApiException(

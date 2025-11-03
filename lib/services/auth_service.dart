@@ -38,16 +38,12 @@ class AuthService {
     await _stateManager.setGlobalState('refreshToken', refreshToken);
 
     // Optional: store minimal user info if present
-    final userId = response['_id']?.toString();
+    final userId = response['userId']?.toString();
     final role = response['role']?.toString();
-    final username = response['username']?.toString();
-    final name = response['name']?.toString();
     if (userId != null) {
       await _stateManager.setGlobalState('user', {
         'id': userId,
         if (role != null) 'role': role,
-        if (username != null) 'username': username,
-        if (name != null) 'name': name,
       });
     }
 

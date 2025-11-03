@@ -146,10 +146,10 @@ class EnhancedActionDispatcher {
     // Log analytics logout event
     AnalyticsService().logAuthEvent('logout', {});
 
-    // Navigate to landing page and clear stack
-    final switched = NavigationBridge.switchTo('/');
+    // Navigate to login page at the root navigator and clear stack
+    final switched = NavigationBridge.switchTo('/login');
     if (!switched) {
-      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+      Navigator.of(context, rootNavigator: true).pushNamedAndRemoveUntil('/login', (route) => false);
     }
   }
 

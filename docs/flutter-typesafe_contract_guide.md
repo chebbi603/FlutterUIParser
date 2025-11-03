@@ -262,3 +262,9 @@ if (result.isPersonalized) {
   analytics.track('contract_loaded', result.toJson());
 }
 ```
+## State Field Types
+
+- Always specify `type` for each state field; omission defaults to `string`.
+- Use `type: "object"` when the default value is a map/object or when the field represents a model (e.g., `User`).
+- Optional keys like `model` and `schema` help with validation, but they do not override `type`.
+- Example fix: `state.global.user` now includes `type: "object"` to prevent string coercion and runtime cast errors.

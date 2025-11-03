@@ -2,6 +2,73 @@ Project: demo_json_parser (Flutter)
 # Test Results — 2025-11-02
 Latest run: see `docs/history/flutter-test-results-run55.md` for details.
 
+## Summary (Run 64 — EnhancedPageBuilder & Nav refresh validated)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 45 tests
+- Duration: ~6s
+
+- Notable Output (truncated)
+```
+00:06 +45: All tests passed!
+[diag][page] enter id=page1 layout=column components=2 bg=-
+📊 Tracked: pageEnter
+[diag][component] Create type=textButton id=btn1
+📊 Tracked: tap (component=btn1)
+📊 Tracked: pageExit (page=page1)
+[diag][page] enter id=home layout=column components=0 bg=-
+📊 Tracked: pageExit (page=home)
+```
+
+## Summary (Run 63 — Optional field validation for response properties)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 45 tests
+- Duration: ~3s
+
+- Context
+  - Updated `ApiService._validateResponseSchema` to only validate properties present in the response and skip null values in `_validateValueAgainstSchema`.
+  - Prevents erroneous failures like `ApiException: Field "_id" must be string` when optional fields are absent.
+  - Combined with prior ObjectId coercion, responses are now validated robustly against the contract.
+
+- Notable Output (truncated)
+```
+00:03 +45: All tests passed!
+```
+
+## Summary (Run 62 — Response validation: ObjectId coercion for string fields)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 45 tests
+- Duration: ~3s
+
+- Context
+  - Enhanced `ApiService` response validation now accepts common ObjectId-like map shapes for fields typed as `string` by coercing to strings (`$oid`, `oid`, `id`, `value`, `string`, `hex`, `hexString`).
+  - Fixes debug auto-login failure `ApiException: Field "_id" must be string` when backend returns Mongo-style `_id` objects.
+
+- Notable Output (truncated)
+```
+00:03 +45: All tests passed!
+```
+
+## Summary (Run 59 — Analytics cast guard for Map types)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 45 tests
+- Duration: ~3s
+
+- Context
+  - Replaced fragile `as Map<String, dynamic>?` casts in `AnalyticsService` with guard patterns.
+  - Prevents runtime error: `type 'String' is not a subtype of type 'Map<String, dynamic>?' in type cast` when unexpected payloads are encountered.
+
+- Additional Change
+  - `_formatEventForBackend` now reads `state.user` defensively (supports Map or String), avoiding generic cast failures.
+
+- Notable Output (truncated)
+```
+00:03 +45: All tests passed!
+```
+
 ## Summary (Run 58 — Per-event top-level id alias for backend attribution)
 - Command: `flutter test`
 - Result: All tests passed
@@ -803,4 +870,37 @@ Relevant Logs (truncated):
 ## Notable Output (truncated)
 ```
 00:03 +44: All tests passed!
+```
+## Run 2025-11-03
+
+- Tests: 45 passed, 45 total
+- Time: 00:04
+- Notes: analytics events logged during tests; no failures.
+## Run 2025-11-03 (post bottom-nav gating fix)
+
+- Tests: 45 passed, 45 total
+- Time: 00:04
+- Notes: bottom navigation auth gating updated; existing widget tests unaffected.
+## Run 2025-11-03 (post logout navigation root fix)
+
+- Tests: 45 passed, 45 total
+- Time: 00:04
+- Notes: root navigator used for logout routing; no regressions observed.
+
+## Run 2025-11-03 (Analytics DTO alignment: remove top-level id)
+
+- Command: `flutter test`
+- Outcome: All tests passed
+- Total: 45 tests
+- Duration: ~4 seconds
+
+- Highlights:
+- Updated `AnalyticsService` to remove invalid top-level `id` and include `userId` for event-level attribution.
+- Tagging (rage_click, rapid_repeat) and form submit error linking validated.
+
+- Logs excerpt (truncated):
+```
+00:04 +45: All tests passed!
+📊 Tracked: tap (component=btn1, page=null, scope=public, ...)
+⚠️ No backendUrl configured; keeping 1 events in memory
 ```

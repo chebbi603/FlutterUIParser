@@ -521,7 +521,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     final pagesUI = contract!.pagesUI;
 
     if (pagesUI.bottomNavigation?.enabled == true) {
-      final requiresAuth = _authGate?.isRouteProtected('/home') ?? false;
+      // Bottom navigation should only be visible when inside the app.
+      // Prefer explicit contract flag; default to requiring auth.
+      final bottomNav = pagesUI.bottomNavigation!;
+      final requiresAuth = bottomNav.authRequired ?? true;
       final allowed = !requiresAuth || _isAuthed();
       _logAuthCheck('bottomNavigation', allowed);
       if (!allowed) {

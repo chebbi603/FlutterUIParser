@@ -210,7 +210,8 @@ class AnalyticsService extends ChangeNotifier {
     final all = events.map((e) => _formatEventForBackend(e)).toList();
     // Validate presence of contract metadata before sending (now inside data)
     final missingMeta = all.where((m) {
-      final data = (m['data'] as Map<String, dynamic>?) ?? const {};
+      final raw = m['data'];
+      final data = raw is Map<String, dynamic> ? raw : const {};
       return !data.containsKey('contractType') ||
           !data.containsKey('contractVersion') ||
           !data.containsKey('isPersonalized');
@@ -243,7 +244,8 @@ class AnalyticsService extends ChangeNotifier {
         } else if (res.statusCode == 401) {
           if (kDebugMode) print('❌ Analytics flush unauthorized (401).');
           final hasAuthedEvents = chunk.any((ev) {
-            final data = (ev['data'] as Map<String, dynamic>?) ?? const {};
+            final raw = ev['data'];
+            final data = raw is Map<String, dynamic> ? raw : const {};
             return data['userId'] != null;
           });
           if (hasAuthedEvents) {
@@ -280,7 +282,8 @@ class AnalyticsService extends ChangeNotifier {
     }
     final formatted = events.map((e) => _formatEventForBackend(e)).toList();
     final publicOnly = formatted.where((m) {
-      final data = (m['data'] as Map<String, dynamic>?) ?? const {};
+      final raw = m['data'];
+      final data = raw is Map<String, dynamic> ? raw : const {};
       return (data['pageScope'] ?? 'public') == 'public';
     }).toList();
     if (publicOnly.isEmpty) {
@@ -387,8 +390,15 @@ class AnalyticsService extends ChangeNotifier {
   }
 
   Map<String, dynamic> _formatEventForBackend(TrackingEvent e) {
-    final userObj = _stateManager?.getGlobalState<Map<String, dynamic>>('user');
-    final currentUserId = userObj?['id']?.toString();
+    // Read user from global state defensively: it can be a Map or a String
+    final rawUser = _stateManager?.getGlobalState<Object?>('user');
+    String? currentUserId;
+    if (rawUser is Map) {
+      final idVal = (rawUser as Map)['id'];
+      if (idVal != null) currentUserId = idVal.toString();
+    } else if (rawUser is String) {
+      currentUserId = rawUser;
+    }
     final dto = <String, dynamic>{
       'timestamp': e.timestamp.toIso8601String(),
       'componentId': e.componentId ?? 'unknown',
@@ -397,9 +407,9 @@ class AnalyticsService extends ChangeNotifier {
     if (e.pageId != null && e.pageId!.isNotEmpty) {
       dto['page'] = e.pageId;
     }
-    // Include top-level per-event alias for backend attribution when valid
+    // Include top-level per-event userId for backend attribution when valid
     if (currentUserId != null && _isValidObjectId(currentUserId)) {
-      dto['id'] = currentUserId;
+      dto['userId'] = currentUserId;
     }
     // Only include a valid sessionId (24-hex) to avoid server errors
     final sid = _getSessionIdFromState();
@@ -443,12 +453,14 @@ class AnalyticsService extends ChangeNotifier {
       final sid = m['sessionId'];
       final et = m['eventType'];
       final cid = m['componentId'];
-      final scope = (m['data'] as Map<String, dynamic>?)?['pageScope'];
+      final raw = m['data'];
+      final scope = raw is Map<String, dynamic> ? raw['pageScope'] : null;
       return '$ts|$sid|$et|$cid|$scope';
     }).toSet();
     events.removeWhere((e) {
       final fm = _formatEventForBackend(e);
-      final d = (fm['data'] as Map<String, dynamic>?) ?? const {};
+      final raw = fm['data'];
+      final d = raw is Map<String, dynamic> ? raw : const {};
       final sig = '${fm['timestamp']}|${fm['sessionId']}|${fm['eventType']}|${fm['componentId']}|${d['pageScope']}';
       return signatures.contains(sig);
     });

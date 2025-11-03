@@ -122,12 +122,12 @@ Bearer token authentication is supported for protected endpoints; public endpoin
 - Login flow: Backend issues an access token (e.g., `POST /auth/login`).
 - Frontend sets header: `Authorization: Bearer <token>` only when the endpoint is protected.
 - Token refresh: Expose `POST /auth/refresh` if needed; contract can define actions to call it.
- - Response fields (login): `{ "_id": "...", "role": "USER", "username": "user", "name": "User Name", "accessToken": "...", "refreshToken": "..." }`
+ - Response fields (login): `{ "userId": "...", "role": "USER", "accessToken": "...", "refreshToken": "..." }`
  - Client state mapping: On successful login, the Flutter client stores:
    - `authToken` ← `accessToken`
    - `refreshToken` ← `refreshToken`
-   - `state.user` ← `{ id: _id, role, username, name }`
- - Template usage: Components can reference `${state.user.username}` or `${state.user.name}` directly in `text` and `image.src` templates.
+   - `state.user` ← `{ id: userId, role }`
+ - Logout behavior: On logout, tokens and state are cleared and the app navigates to `/login`, removing prior routes from the stack.
 
 ## 7. Pagination & Filtering
 Standardize query parameters for list endpoints.
