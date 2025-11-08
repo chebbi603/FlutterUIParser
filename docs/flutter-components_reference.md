@@ -257,6 +257,45 @@ Many support nested `onSuccess`/`onError` and template variables `${state.<key>}
 - `lib/utils/parsing_utils.dart` — Parsing helpers (colors, keyboard types, icons)
  - `lib/screens/offline_screen.dart` — Offline state screen with retry
 
+## Page Layouts
+
+- `scroll`: Wraps children in a single scroll container.
+- `column`: Stacks children vertically without scrolling.
+- `center`: Centers the children.
+- `grid` (new): Renders the page body as a grid using `GridView.count`.
+
+Page-level grid options (new):
+
+- `columns`: Number of columns for the page grid.
+- `spacing`: Spacing between grid items (applies to both axes).
+
+Behavior:
+
+- If `layout` is `grid`, the page renders a `GridView.count` using `columns` and `spacing`.
+- If `layout` is `scroll` and either `columns` or `spacing` is provided, the page will render as a grid instead of a `SingleChildScrollView + Column`.
+- If neither is provided, `scroll` behaves as before.
+
+Example:
+
+```
+{
+  "id": "home",
+  "title": "Home",
+  "layout": "scroll",
+  "columns": 3,
+  "spacing": 12,
+  "children": [
+    { "type": "text", "id": "c1", "text": "One" },
+    { "type": "text", "id": "c2", "text": "Two" },
+    { "type": "text", "id": "c3", "text": "Three" }
+  ]
+}
+```
+
+Diagnostics:
+
+- Debug prints include `[diag][pageGrid] page=<id> columns=<n> spacing=<px> children=<count>` to help verify runtime values.
+
 ## Offline Screen (Utility)
 
 - Path: `lib/screens/offline_screen.dart`

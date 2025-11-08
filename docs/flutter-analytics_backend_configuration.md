@@ -77,6 +77,75 @@ ANALYTICS_BACKEND_URL=http://localhost:8081/events
   - Success: `Analytics configured: http://localhost:8081/events`
   - Disabled: `Analytics disabled: no backendUrl in contract`
 
+### Path Normalization (new)
+- The client normalizes common misconfigurations to the canonical ingestion path `'/events'`.
+- If the contract or env provides any of the below, it will be coerced to `http://<host>:<port>/events`:
+  - `http://<host>:<port>/` (empty path)
+  - `http://<host>:<port>/analytics`
+  - `http://<host>:<port>/analytics/`
+  - Any URL whose path ends with `/analytics/events`
+- Rationale: some setups expose analytics under `/analytics/events`; this app expects `/events` as the root ingestion endpoint for consistency across environments.
+
+### Contract-Level Normalization (new)
+- In addition to URL normalization at startup, the contract parser enforces canonical endpoint paths for the `analytics` service.
+- Behavior:
+  - Service name aliases like `AnalyticsService` or `analytics` are supported and treated equivalently.
+  - Any analytics endpoint with a legacy event path (`'/event'`, `'/events'`, or `'/analytics(/event|/events)'`) is coerced to `'/events'` during parsing.
+  - Trailing `'/analytics'` on a service `baseUrl` is trimmed to avoid double paths.
+- Example input contract snippet (legacy):
+```json
+{
+  "services": {
+    "AnalyticsService": {
+      "baseUrl": "http://localhost:8081/analytics",
+      "endpoints": {
+        "trackEvent": { "method": "POST", "path": "/event" }
+      }
+    }
+  }
+}
+```
+- Result after parsing (effective configuration):
+```json
+{
+  "services": {
+    "analytics": {
+      "baseUrl": "http://localhost:8081",
+      "endpoints": {
+        "trackEvent": { "method": "POST", "path": "/events" }
+      }
+    }
+  }
+}
+```
+- Impact:
+  - Prevents requests like `POST /analytics/event` and ensures `POST /events` is used consistently.
+  - Keeps older contracts functional without backend changes.
+
+### Action Routing (trackEvent)
+- To ensure consistent ingestion and visibility in MongoDB, contract actions that call the analytics service `trackEvent` endpoint are routed through `AnalyticsService` batching.
+- Behavior:
+  - When an action specifies `service: 'analytics'` (or `AnalyticsService`) and `endpoint: 'trackEvent'`, the dispatcher converts the provided payload (e.g., `{ event, feature, action }`) into a structured `TrackingEvent` via `AnalyticsService.trackComponentInteraction(...)`.
+  - The client immediately calls `AnalyticsService.flush()` after tracking to push the event batch to `POST /events`.
+  - Original fields such as `event`, `feature`, and `action` are preserved under `data` in the event payload for downstream analytics.
+- Rationale:
+  - Avoids split paths where some clicks post a single JSON body and others use batched tracking.
+  - Guarantees single-click events appear alongside batched navigation events in the `events` collection.
+- Example (contract action):
+```json
+{
+  "action": "apiCall",
+  "params": {
+    "service": "analytics",
+    "endpoint": "trackEvent",
+    "event": "item_click",
+    "feature": "podcasts",
+    "action": "view_podcast"
+  }
+}
+```
+This action is now transformed into a tracked `tap` event with `data.event`, `data.feature`, and `data.action` attributes and flushed immediately.
+
 ## Debug-Only Test Event Flush
 - A development-only button labeled `Send Test Analytics` appears under the refresh banner on all pages.
 - When pressed (debug builds only):
@@ -120,6 +189,7 @@ ANALYTICS_BACKEND_URL=http://localhost:8081/events
 - 401 behavior: client halts flush and clears events that contain `userId`, preventing retry loops.
 - Empty URL after env resolution: Ensure `.env` defines `ANALYTICS_BACKEND_URL` with a full URL.
 - No button visible: The test button only appears in debug builds (`kDebugMode`).
+- Unexpected path `/analytics/events`: verify `.env` or contract `analytics.backendUrl` does not include `/analytics` (the client now coerces it to `/events`). Prefer setting `ANALYTICS_BACKEND_URL=http://localhost:8081/events`.
 ### Page Scope Field (new)
 - Client enriches events with `pageScope`:
   - Values: `public` | `authenticated`
@@ -144,22 +214,15 @@ Example (server‑received event):
 }
 ```
 
-## Auth Header and Debug Auto-Login
+## Auth Header and Debug Auto-Login (Updated)
 - Analytics endpoints are public. If an access token is available, the client may attach `Authorization: Bearer <JWT>`; this header is optional.
-- JWT acquisition follows standard app login. For local development, debug auto-login can be enabled via `.env`:
-```
-DEBUG_AUTO_LOGIN=true
-DEBUG_EMAIL=test@example.com
-DEBUG_PASSWORD=password123
-```
-- Behavior:
-  - In debug builds only, if no current auth token exists, the app attempts a login at startup using the above credentials.
-  - On success, subsequent analytics flushes may include the `Authorization` header; for public endpoints this header is optional.
-  - Errors are logged but do not block the UI; you can still navigate and use the app.
-- Seeded backend credentials:
-  - Email: `test@example.com`
-  - Password: `password123`
-  - These are seeded by the NestJS backend when seeding is enabled.
+- JWT acquisition follows standard app login. Debug auto-login has been removed.
+- Removal rationale:
+  - Prevent unintended authentication during development and startup.
+  - Align with token-only gating (protected routes require a non-empty `authToken`, not `state.user.id`).
+- Impact:
+  - Manual login is required to obtain a token; analytics continue to ingest without authentication.
+  - No `.env` keys for debug auto-login are honored anymore (`DEBUG_AUTO_LOGIN`, `DEBUG_EMAIL`, `DEBUG_PASSWORD`).
 
 ## Startup Baseline Flush (debug-only)
 - In debug builds, the app flushes a small baseline after a short delay (2 seconds) post-startup.
@@ -170,9 +233,9 @@ DEBUG_PASSWORD=password123
 - Start backend with MongoDB configured (`MONGO_URL` in NestJS `.env`).
 - Ensure seeding is enabled (optional) to create the debug user.
 - Verify login route: `POST /auth/login` with body `{ email, password }` returns `accessToken`.
-- Confirm Flutter `.env` has debug auto-login keys and `API_BASE_URL=http://localhost:8081`.
+- Confirm Flutter `.env` sets `API_BASE_URL=http://localhost:8081`.
 - Launch the Flutter app (`flutter run`). In logs you should see:
-  - `[Debug] Auto-login succeeded for test@example.com` (or a failure message)
+  - No debug auto-login messages (feature removed)
   - `Analytics configured: http://localhost:8081/events`
   - Baseline flush attempts shortly after startup.
 - Inspect server logs for `POST /events` (batch) or `POST /events/tracking-event` (single); requests may arrive with or without `Authorization`.

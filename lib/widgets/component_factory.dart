@@ -630,6 +630,10 @@ class EnhancedComponentFactory {
           [];
     }
 
+    // Diagnostics: log grid spacing and columns
+    try {
+      debugPrint('[diag][grid] columns=${columns} spacing=${spacing} children=${children.length}');
+    } catch (_) {}
     return GridView.count(
       crossAxisCount: columns,
       crossAxisSpacing: spacing,
@@ -648,6 +652,10 @@ class EnhancedComponentFactory {
                 .toList() ??
             [];
 
+    // Diagnostics: log row spacing and children count
+    try {
+      debugPrint('[diag][row] spacing=${config.spacing ?? 0} children=${children.length}');
+    } catch (_) {}
     return Row(
       mainAxisAlignment: _parseMainAxisAlignment(config.mainAxisAlignment),
       crossAxisAlignment: _parseCrossAxisAlignment(config.crossAxisAlignment),

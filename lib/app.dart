@@ -1,9 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-// Dotenv is no longer needed in app initialization; environment resolution happens in main.dart
+// Environment resolution now happens in main.dart; no dotenv import needed here
 import 'models/config_models.dart';
 import 'widgets/enhanced_page_builder.dart';
 import 'state/state_manager.dart';
@@ -14,6 +14,8 @@ import 'navigation/navigation_bridge.dart';
 import 'utils/parsing_utils.dart';
 import 'widgets/component_factory.dart';
 import 'providers/contract_provider.dart';
+import 'models/contract_result.dart' show ContractSource;
+import 'persistence/state_persistence.dart';
 import 'screens/offline_screen.dart';
 import 'analytics/services/analytics_service.dart';
 import 'analytics/models/tracking_event.dart';
@@ -40,6 +42,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Set<String> _trackedIds = {};
   OverlayEntry? _toastEntry;
   String? _currentVersion;
+  ContractSource? _currentSource;
   String? _lastAuthToken;
   String? _lastUserId;
   bool _isRefreshing = false;
@@ -53,20 +56,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     // React to auth token/user changes to refresh contract on login/logout
     stateManager.addListener(_onStateChanged);
-    // Attach provider listener and defer initial canonical load until first frame
+    // Attach provider listener and decide initial contract (user first, fallback canonical)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _attachProviderListener();
-      try {
-        final provider = Provider.of<ContractProvider>(context, listen: false);
-        provider.loadCanonicalContract();
-      } catch (_) {
-        // Provider not yet available; try again next frame
-        WidgetsBinding.instance.addPostFrameCallback((__) {
-          if (!mounted) return;
-          final provider = Provider.of<ContractProvider>(context, listen: false);
-          provider.loadCanonicalContract();
-        });
-      }
+      unawaited(_bootLoadInitialContract());
     });
   }
 
@@ -137,10 +130,78 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     if (updatedMap != null) {
       final updated = CanonicalContract.fromJson(updatedMap);
       final newVersion = updated.meta.version;
+      final newSource = provider.contractSource;
       // Apply on first load or version change
-      if (_currentVersion == null || newVersion != _currentVersion) {
+      final shouldApply = (_currentVersion == null || newVersion != _currentVersion) ||
+          (newSource != null && newSource != _currentSource);
+      if (shouldApply) {
         unawaited(_applyUpdatedContract(updated));
+        // Track latest source after applying
+        _currentSource = newSource;
       }
+    }
+  }
+
+  /// Boot-time contract selection: try personalized first, fallback to canonical.
+  Future<void> _bootLoadInitialContract() async {
+    if (!mounted) return;
+    try {
+      final provider = Provider.of<ContractProvider>(context, listen: false);
+      // Read persisted auth token and user from secure storage first
+      final secure = SecureStoragePersistence();
+      await secure.init();
+      final dynamic tokenRaw = await secure.read('state:global:authToken');
+      String? authToken;
+      if (tokenRaw is String) {
+        authToken = tokenRaw;
+      } else if (tokenRaw != null) {
+        authToken = tokenRaw.toString();
+      }
+      final dynamic userRaw = await secure.read('state:global:user');
+      String? userId;
+      if (userRaw is Map<String, dynamic>) {
+        userId = userRaw['id']?.toString();
+      } else if (userRaw is String && userRaw.isNotEmpty) {
+        try {
+          final parsed = jsonDecode(userRaw);
+          if (parsed is Map<String, dynamic>) {
+            userId = parsed['id']?.toString();
+          }
+        } catch (_) {}
+      }
+
+      // Fallback to shared preferences if secure storage did not have values
+      if (authToken == null || authToken.isEmpty || userId == null || userId.isEmpty) {
+        final prefs = SharedPrefsPersistence();
+        await prefs.init();
+        final dynamic tokenLocal = await prefs.read('state:global:authToken');
+        if ((authToken == null || authToken.isEmpty) && tokenLocal is String) {
+          authToken = tokenLocal;
+        }
+        final dynamic userLocal = await prefs.read('state:global:user');
+        if (userLocal is Map<String, dynamic>) {
+          userId = userLocal['id']?.toString();
+        } else if (userLocal is String && userLocal.isNotEmpty) {
+          try {
+            final parsed = jsonDecode(userLocal);
+            if (parsed is Map<String, dynamic>) {
+              userId = parsed['id']?.toString();
+            }
+          } catch (_) {}
+        }
+      }
+
+      if (authToken != null && authToken.isNotEmpty && userId != null && userId.isNotEmpty) {
+        await provider.loadUserContract(userId: userId!, jwtToken: authToken!);
+      } else {
+        await provider.loadCanonicalContract();
+      }
+    } catch (_) {
+      if (!mounted) return;
+      try {
+        final provider = Provider.of<ContractProvider>(context, listen: false);
+        await provider.loadCanonicalContract();
+      } catch (_) {}
     }
   }
 
@@ -174,36 +235,24 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       provider.attachAuthService(authService);
     } catch (_) {}
     final persistedAccess = stateManager.getGlobalState<String>('authToken');
+    // Attempt to load a personalized contract at startup when persisted login exists.
+    // Only trigger if current provider source is canonical or unset to avoid redundant loops.
+    try {
+      final provider = Provider.of<ContractProvider>(context, listen: false);
+      final persistedUser = stateManager.getGlobalState<Map<String, dynamic>>('user');
+      final persistedUserId = persistedUser?['id']?.toString();
+      final source = provider.contractSource;
+      if ((source == null || source == ContractSource.canonical) &&
+          persistedAccess != null && persistedAccess.isNotEmpty &&
+          persistedUserId != null && persistedUserId.isNotEmpty) {
+        unawaited(_attemptApiRefresh());
+      }
+    } catch (_) {}
     if (persistedAccess != null && persistedAccess.isNotEmpty) {
       apiService.setAuthToken(persistedAccess);
     }
 
-    // Debug-only: optional auto-login using credentials from .env
-    if (kDebugMode && !_isAuthed()) {
-      try {
-        final envReady = dotenv.isInitialized;
-        final autoLogin = envReady
-            ? (dotenv.env['DEBUG_AUTO_LOGIN']?.toLowerCase() == 'true')
-            : false;
-        final email = envReady ? dotenv.env['DEBUG_EMAIL']?.trim() : null;
-        final password = envReady ? dotenv.env['DEBUG_PASSWORD']?.trim() : null;
-        if (autoLogin && (email?.isNotEmpty ?? false) && (password?.isNotEmpty ?? false)) {
-          // Defer to avoid blocking initialization; errors are logged only
-          Future.microtask(() async {
-            try {
-              final ok = await authService.login(email: email!, password: password!);
-              if (ok) {
-                debugPrint('[Debug] Auto-login succeeded for $email');
-              } else {
-                debugPrint('[Debug] Auto-login failed for $email');
-              }
-            } catch (e) {
-              debugPrint('[Debug] Auto-login error: $e');
-            }
-          });
-        }
-      } catch (_) {}
-    }
+    // Removed debug auto-login behavior to prevent unintended authentication on startup
 
     // Set tracked component ids for analytics widgets; actual AnalyticsService
     // configuration happens here once a contract is available.
@@ -211,13 +260,20 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
     // Configure analytics backend if provided by contract, with safe normalization
     var analyticsBackend = loadedContract.analytics?.backendUrl?.trim();
-    // Normalize localhost port to 8081 if misconfigured and ensure /events path
+    // Normalize localhost port to 8081 if misconfigured and ensure canonical /events path
     if (analyticsBackend != null && analyticsBackend.isNotEmpty) {
       final parsed = Uri.tryParse(analyticsBackend);
       if (parsed != null) {
         final isLocalHost = parsed.host == 'localhost' || parsed.host == '127.0.0.1';
         final needsPortFix = isLocalHost && parsed.port == 8082; // backend runs on 8081
-        final needsPathFix = parsed.path.isEmpty || parsed.path == '/';
+        // Coerce common misconfigurations to canonical '/events'
+        final path = parsed.path;
+        final needsPathFix =
+            path.isEmpty ||
+            path == '/' ||
+            path == '/analytics' ||
+            path == '/analytics/' ||
+            path.endsWith('/analytics/events');
         if (needsPortFix || needsPathFix) {
           final fixed = Uri(
             scheme: parsed.scheme.isNotEmpty ? parsed.scheme : 'http',
@@ -308,9 +364,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   bool _isAuthed() {
     try {
       final token = stateManager.getGlobalState<String>('authToken');
-      final user = stateManager.getGlobalState<Map<String, dynamic>>('user');
-      final uid = user?['id']?.toString();
-      return token != null && token.isNotEmpty && uid != null && uid.isNotEmpty;
+      // Consider user authenticated when a non-empty auth token exists.
+      // Some backends may not return a user id on login; gating should be token-based.
+      return token != null && token.isNotEmpty;
     } catch (_) {
       return false;
     }

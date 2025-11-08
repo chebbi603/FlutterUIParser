@@ -10,6 +10,7 @@ This document provides a comprehensive overview of the project’s current statu
 - Runtime: Designed to run with `flutter run` (iOS simulator available). No contract validation module is active in runtime. Canonical contract retrieval first calls `/contracts/canonical` (public), falls back to `/contracts/public/canonical` on `401`/`404`. There is no local asset fallback; ensure backend availability or mock HTTP in tests.
 - Coverage: `coverage/lcov.info` exists but may reference now-removed files; regenerate coverage to reflect the latest state.
 - Documentation: Extensive docs exist; some legacy mentions of the removed validation module remain and are noted below.
+ - Behavior: At startup, if a persisted `authToken` and `state.user.id` exist, the app triggers a personalized contract fetch. UI updates apply when the contract source changes (canonical → personalized), even without a version bump.
 
 ## Quick Run and Build
 

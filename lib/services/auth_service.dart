@@ -38,13 +38,30 @@ class AuthService {
     await _stateManager.setGlobalState('refreshToken', refreshToken);
 
     // Optional: store minimal user info if present
-    final userId = response['userId']?.toString();
+    final userId = response['userId']?.toString() ?? response['_id']?.toString();
     final role = response['role']?.toString();
+    final username = response['username']?.toString();
+    final name = response['name']?.toString();
     if (userId != null) {
-      await _stateManager.setGlobalState('user', {
+      final Map<String, dynamic> userMap = {
         'id': userId,
-        if (role != null) 'role': role,
-      });
+      };
+      if (role != null) userMap['role'] = role;
+      // Persist username and name when provided by backend
+      if (username != null && username.isNotEmpty) {
+        userMap['username'] = username;
+      }
+      if (name != null && name.isNotEmpty) {
+        userMap['name'] = name;
+      }
+      // Fallback: ensure one of name/username is present for greetings
+      if (!userMap.containsKey('name') && userMap.containsKey('username')) {
+        userMap['name'] = userMap['username'];
+      }
+      if (!userMap.containsKey('username') && userMap.containsKey('name')) {
+        userMap['username'] = userMap['name'];
+      }
+      await _stateManager.setGlobalState('user', userMap);
     }
 
     // Post-login: attempt personalized contract fetch

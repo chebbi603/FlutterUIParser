@@ -164,9 +164,15 @@ class _EnhancedPageBuilderState extends State<EnhancedPageBuilder> {
 
     switch (widget.config.layout.toLowerCase()) {
       case 'scroll':
+        // If page-level grid options are defined, render a grid within the page
+        if ((widget.config.columns ?? 0) > 0 || (widget.config.spacing ?? 0) > 0) {
+          return _buildGridLayout(children);
+        }
         return _buildScrollLayout(children);
       case 'center':
         return _buildCenterLayout(children);
+      case 'grid':
+        return _buildGridLayout(children);
       case 'column':
       default:
         return _buildColumnLayout(children);
@@ -180,6 +186,22 @@ class _EnhancedPageBuilderState extends State<EnhancedPageBuilder> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: children,
       ),
+    );
+  }
+
+  Widget _buildGridLayout(List<Widget> children) {
+    final columns = widget.config.columns ?? 2;
+    final spacing = widget.config.spacing ?? 8.0;
+    if (kDebugMode) {
+      debugPrint('[diag][pageGrid] page=${widget.config.id} columns=$columns spacing=$spacing children=${children.length}');
+    }
+    return GridView.count(
+      crossAxisCount: columns,
+      crossAxisSpacing: spacing,
+      mainAxisSpacing: spacing,
+      shrinkWrap: true,
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: children,
     );
   }
 

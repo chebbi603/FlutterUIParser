@@ -2,8 +2,8 @@ Project: demo_json_parser (Flutter)
 # NavigationBridge Auth Enforcement
 
 ## Overview
-- `NavigationBridge.switchTo(route)` now enforces contract route auth flags.
-- Protected routes require an authenticated user (`authToken` and `user.id` present in global state).
+- `NavigationBridge.switchTo(route)` enforces contract route auth flags.
+- Protected routes require an authenticated session (non-empty `authToken` in global state).
 - Unauthorized attempts redirect to `/login` and emit a standardized analytics event.
 
 ## Contract Integration
@@ -23,7 +23,7 @@ Project: demo_json_parser (Flutter)
 ## Authentication Predicate
 - The app wires `NavigationBridge` with two predicates:
   - `isRouteProtected(String route)`: reads the contract routes map.
-  - `isAuthed()`: returns `true` when `authToken` and `user.id` exist in `EnhancedStateManager`.
+  - `isAuthed()`: returns `true` when a non-empty `authToken` exists in `EnhancedStateManager`.
 
 ## Analytics Standardization
 - Use `AnalyticsService.logAuthEvent(name, data)` for auth telemetry:

@@ -1,6 +1,108 @@
 Project: demo_json_parser (Flutter)
-# Test Results — 2025-11-02
-Latest run: see `docs/history/flutter-test-results-run55.md` for details.
+# Test Results — 2025-11-05
+Latest run: see `docs/history/flutter-test-results-run71.md` for details.
+
+## Summary (Run 77 — Unit — 48 tests passed) — Docs alignment
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 48 tests
+- Duration: ~5s
+
+- Notable Output (truncated)
+```
+00:05 +48: All tests passed!
+📊 Tracked: tap (component=x, page=null, scope=public, ...)
+⚠️ No backendUrl configured; keeping 1 events in memory
+```
+
+## Summary (Run 76 — Backend authenticated fallback unaffected)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 48 tests
+- Duration: ~7s
+
+- Context
+  - Verified that backend change to include base authenticated pages in partial contracts does not impact Flutter contract parsing or navigation/auth gating.
+  - Analytics batching and tagging logs remain stable; ingestion stubs continue to print expected diagnostics in tests.
+
+- Notable Output (truncated)
+```
+00:07 +48: All tests passed!
+📊 Tracked: tap (component=btn1, page=null, scope=public, ...)
+⚠️ No backendUrl configured; keeping 1 events in memory
+```
+
+## Summary (Run 74 — Dispatch trackEvent via AnalyticsService)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 48 tests
+- Duration: ~4s
+
+- Context
+  - Added a dispatcher special-case to route contract `analytics` `trackEvent` actions through `AnalyticsService` batching and perform an immediate `flush()`.
+  - Ensures single-click events (e.g., podcast item clicks) are ingested consistently into MongoDB alongside bottom navigation events.
+  - Updated `docs/flutter-analytics_backend_configuration.md` with an Action Routing section.
+
+- Notable Output (truncated)
+```
+00:04 +48: All tests passed!
+📊 Tracked: pageEnter (component=null, page=home, scope=public, ...)
+📊 Tracked: pageExit (component=null, page=home, scope=public, ...)
+```
+
+## Summary (Run 73 — Contract-level analytics normalization)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 48 tests
+- Duration: ~5s
+
+- Context
+  - Enforced canonical analytics endpoint paths in `CanonicalContract.fromJson` by normalizing legacy `'/event'`, `'/events'`, and `'/analytics/event(s)'` to `'/events'`.
+  - Trimmed trailing `'/analytics'` from analytics service `baseUrl` during service parsing.
+  - Updated `docs/flutter-analytics_backend_configuration.md` with Contract-Level Normalization details.
+
+- Notable Output (truncated)
+```
+00:05 +48: All tests passed!
+📊 Tracked: tap (component=x, page=null, scope=public, ...)
+⚠️ No backendUrl configured; keeping 1 events in memory
+```
+
+## Summary (Run 72 — Analytics URL path normalization)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 48 tests
+- Duration: ~4s
+
+- Context
+  - Normalized analytics backend URL paths to canonical `'/events'` in `lib/app.dart`.
+  - Coerces common misconfigurations like `'/analytics'` or `'/analytics/events'` to ensure clicks and flushes target the correct ingestion endpoint.
+  - Updated `docs/flutter-analytics_backend_configuration.md` and `docs/flutter-whats-new.md` accordingly.
+
+- Notable Output (truncated)
+```
+00:04 +48: All tests passed!
+[diag][pageGrid] page=home columns=3 spacing=12.0 children=3
+📊 Tracked: pageEnter (component=null, page=home, scope=public, ...)
+```
+
+## Summary (Run 71 — Token-only auth gating fix)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 48 tests
+- Duration: ~6s
+
+- Context
+  - Relaxed authentication predicate in `lib/app.dart` to consider a session authenticated when a non-empty `authToken` exists, without requiring `state.user.id`.
+  - Fixes post-login redirect when backend returns tokens but omits `user.id`.
+  - Updated `docs/flutter-navigation_auth_enforcement.md` to reflect token-based gating.
+
+- Notable Output (truncated)
+```
+00:06 +48: All tests passed!
+📊 Tracked: pageEnter (component=null, page=home, scope=public, ...)
+⚠️ No backendUrl configured; keeping 1 events in memory
+```
 
 ## Summary (Run 64 — EnhancedPageBuilder & Nav refresh validated)
 - Command: `flutter test`
@@ -18,6 +120,42 @@ Latest run: see `docs/history/flutter-test-results-run55.md` for details.
 📊 Tracked: pageExit (page=page1)
 [diag][page] enter id=home layout=column components=0 bg=-
 📊 Tracked: pageExit (page=home)
+```
+
+## Summary (Run 67 — Auth Username/Name Persisted, Auto-Login Removed)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 47 tests
+- Duration: ~2s
+
+- Context
+  - Updated `AuthService.login` to persist `state.user.username` and `state.user.name` from backend response; adds fallbacks so one populates the other when missing.
+  - Removed debug-only auto-login in `lib/app.dart` to prevent unintended authentication on startup.
+
+- Notable Output (truncated)
+```
+00:02 +47: All tests passed!
+[diag][page] enter id=home layout=scroll components=3 bg=-
+📊 Tracked: pageEnter (component=null, page=home, scope=public, ...)
+```
+
+## Summary (Run 68 — Username Greeting Verified, Page Grid Validated)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 48 tests
+- Duration: ~4s
+
+- Context
+  - Added widget test to assert "Welcome Back, ${state.user.username}" resolves correctly when `state.user.username` is present.
+  - Confirmed page-level grid rendering via `GridView.count` with `columns` and `spacing` from page config.
+  - Changes under test include persisting `user.username`/`user.name` in `AuthService` and removal of debug auto-login in `app.dart`.
+
+- Notable Output (truncated)
+```
+00:04 +48: All tests passed!
+[diag][binding] text id=- field="text" value="Welcome Back, ${state.user.username}"
+00:04 +1: test/widgets/welcome_back_username_test.dart: Welcome Back shows username when available
+[diag][pageGrid] page=home columns=3 spacing=12.0 children=3
 ```
 
 ## Summary (Run 63 — Optional field validation for response properties)
@@ -184,6 +322,23 @@ Latest run: see `docs/history/flutter-test-results-run55.md` for details.
 📊 Tracked: tap (component=x, page=null, scope=public, ...)
 ⚠️ No backendUrl configured; keeping 1 events in memory
 📊 Tracked: pageEnter / pageExit events in EnhancedPageBuilder
+```
+
+## Summary (Run 65 — Spacing parsing and Row builder verification)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 46 tests
+- Duration: ~3s
+
+- Context
+  - Added diagnostics in `component_factory.dart` to log `spacing` and child count for `row` and `grid` builders.
+  - Added widget test `test/widgets/row_spacing_test.dart` asserting `SizedBox` separators with the expected width are inserted between `Row` children.
+  - Confirms `EnhancedComponentConfig.spacing` is parsed via `ParsingUtils.safeToDouble` and applied by `_applySpacing` in `Row`.
+
+- Notable Output (truncated)
+```
+[diag][row] spacing=12 children=3
+00:03 +46: All tests passed!
 ```
 
 ## Summary (Run 49 — Debug auto-login for analytics auth + baseline flush)
@@ -903,4 +1058,92 @@ Relevant Logs (truncated):
 00:04 +45: All tests passed!
 📊 Tracked: tap (component=btn1, page=null, scope=public, ...)
 ⚠️ No backendUrl configured; keeping 1 events in memory
+```
+
+## Run 2025-11-04 (canonical spacing and typography polish)
+
+- Command: `flutter test`
+- Outcome: All tests passed
+- Total: 45 tests
+- Duration: ~3–4 seconds
+
+Highlights:
+- Spacing and hierarchy improvements applied to canonical `pagesUI`:
+  - Replaced `grid.style.gap` with `grid.spacing` in Podcasts to enable proper gaps.
+  - Added `row.spacing` and `column.spacing` in Music and Audiobooks item builders for consistent space-x/space-y.
+  - Applied typography tokens via `style.use` (`largeTitle`, `title1`, `body`, `caption`) for clear title/subtitle hierarchy.
+- Verified token resolution and spacing behavior via `EnhancedComponentFactory` and helpers (`_applySpacing`).
+- No test changes required; analytics and page builder suites remain green.
+
+Logs excerpt (truncated):
+```
+00:03 +45: All tests passed!
+📊 Tracked: input (component=field1, page=null, scope=public, ...)
+⚠️ No backendUrl configured; keeping 1 events in memory
+```
+
+## Summary (Run 66 — Page-level Grid Support)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 47 tests
+- Duration: ~4s
+
+- Context
+  - Added page-level grid properties to `EnhancedPageConfig`: `columns` and `spacing`.
+  - Updated `EnhancedPageBuilder` to render a grid when `layout` is `grid`, or when `layout` is `scroll` and page-level `columns`/`spacing` are provided.
+  - Added widget test `test/widgets/page_grid_layout_test.dart` asserting `GridView.count` is used with correct `crossAxisCount` and spacing values.
+
+- Notable Output (truncated)
+```
+[diag][pageGrid] page=home columns=3 spacing=12.0 children=3
+00:04 +47: All tests passed!
+```
+## Summary (Run 78 — Contract source switching & startup refresh)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 48 tests
+- Duration: ~4–5s
+
+- Context
+  - Updated `lib/app.dart` to apply UI updates when `ContractSource` changes (canonical → personalized) even if `meta.version` stays the same.
+  - Added startup attempt to load a personalized contract when a persisted `authToken` and `user.id` exist, preventing the app from sticking to canonical post-relaunch.
+
+- Notable Output (truncated)
+```
+00:04 +48: All tests passed!
+[diag][page] enter id=home layout=scroll components=3 bg=-
+📊 Tracked: pageEnter (component=null, page=home, scope=public, ...)
+⚠️ No backendUrl configured; keeping 1 events in memory
+```
+## Summary (Run 79 — Boot user-first, fallback canonical)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 48 tests
+- Duration: ~3–4s
+
+- Context
+  - Startup contract selection now attempts to load the personalized user contract first when persisted `authToken` and `user.id` are found; falls back to canonical otherwise.
+  - Reads persisted values from secure storage and shared preferences for robustness.
+
+- Notable Output (truncated)
+```
+00:03 +48: All tests passed!
+[diag][page] enter id=home layout=scroll components=3 bg=-
+📊 Tracked: pageEnter (component=null, page=home, scope=public, ...)
+```
+
+## Summary (Run 80 — JSON decode helper fix)
+- Command: `flutter test`
+- Result: All tests passed
+- Total: 48 tests
+- Duration: ~3–4s
+
+- Context
+  - Replaced undefined `ParsingUtils.tryDecodeJson` calls with `jsonDecode` from `dart:convert`; added the import.
+  - Affects boot-time parsing of persisted `state:global:user` when stored as a JSON string.
+
+- Notable Output (truncated)
+```
+00:03 +48: All tests passed!
+[diag][page] enter id=home layout=scroll components=1 bg=#FFFFFF
 ```

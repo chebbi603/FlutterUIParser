@@ -83,6 +83,73 @@ class CanonicalContract {
         }
         // Add canonical aliases for service keys (e.g., AuthService -> auth)
         final Map<String, dynamic> withAliases = {};
+
+        Map<String, dynamic> _normalizeAnalyticsServiceConfig(dynamic value) {
+          final Map<String, dynamic> map =
+              (value is Map<String, dynamic>) ? Map<String, dynamic>.from(value) : <String, dynamic>{};
+
+          // Normalize baseUrl: trim trailing /analytics
+          final base = map['baseUrl']?.toString();
+          if (base != null && base.isNotEmpty) {
+            final normalizedBase = base.replaceFirst(RegExp(r"/analytics/?$"), '');
+            map['baseUrl'] = normalizedBase.isNotEmpty ? normalizedBase : base;
+          }
+
+          // Normalize endpoints: coerce any event path to canonical /events
+          final endpoints = map['endpoints'];
+          if (endpoints is Map<String, dynamic>) {
+            final updated = <String, dynamic>{};
+            endpoints.forEach((ekey, evalue) {
+              if (evalue is Map<String, dynamic>) {
+                final ev = Map<String, dynamic>.from(evalue);
+                final p = ev['path']?.toString();
+                if (p != null) {
+                  final isLegacyEvent =
+                      p == '/event' || p == '/events' || RegExp(r'^/analytics(/event|/events)?$').hasMatch(p);
+                  if (isLegacyEvent) {
+                    ev['path'] = '/events';
+                  }
+                }
+                updated[ekey] = ev;
+              } else if (evalue is String) {
+                final p = evalue;
+                final isLegacyEvent =
+                    p == '/event' || p == '/events' || RegExp(r'^/analytics(/event|/events)?$').hasMatch(p);
+                updated[ekey] = isLegacyEvent ? '/events' : p;
+              } else {
+                updated[ekey] = evalue;
+              }
+            });
+            map['endpoints'] = updated;
+          } else if (endpoints is List) {
+            final updated = <dynamic>[];
+            for (final item in endpoints) {
+              if (item is Map<String, dynamic>) {
+                final ev = Map<String, dynamic>.from(item);
+                final p = ev['path']?.toString();
+                if (p != null) {
+                  final isLegacyEvent =
+                      p == '/event' || p == '/events' || RegExp(r'^/analytics(/event|/events)?$').hasMatch(p);
+                  if (isLegacyEvent) {
+                    ev['path'] = '/events';
+                  }
+                }
+                updated.add(ev);
+              } else if (item is String) {
+                final p = item;
+                final isLegacyEvent =
+                    p == '/event' || p == '/events' || RegExp(r'^/analytics(/event|/events)?$').hasMatch(p);
+                updated.add(isLegacyEvent ? '/events' : p);
+              } else {
+                updated.add(item);
+              }
+            }
+            map['endpoints'] = updated;
+          }
+
+          return map;
+        }
+
         String? _aliasFor(String key) {
           final lower = key.toLowerCase();
           if (lower.endsWith('service')) {
@@ -96,10 +163,12 @@ class CanonicalContract {
           return null;
         }
         source.forEach((key, value) {
-          withAliases[key] = value;
           final alias = _aliasFor(key);
+          final isAnalytics = (alias == 'analytics') || (key.toLowerCase() == 'analytics');
+          final normalized = isAnalytics ? _normalizeAnalyticsServiceConfig(value) : value;
+          withAliases[key] = normalized;
           if (alias != null && !withAliases.containsKey(alias)) {
-            withAliases[alias] = value;
+            withAliases[alias] = normalized;
           }
         });
         return withAliases.map((key, value) => MapEntry(key, ServiceConfig.fromJson(value)));
@@ -762,6 +831,9 @@ class EnhancedPageConfig {
   final EnhancedNavigationBarConfig? navigationBar;
   final List<EnhancedComponentConfig> children;
   final StyleConfig? style;
+  // Page-level grid options
+  final int? columns;
+  final double? spacing;
 
   EnhancedPageConfig({
     required this.id,
@@ -770,6 +842,8 @@ class EnhancedPageConfig {
     this.navigationBar,
     required this.children,
     this.style,
+    this.columns,
+    this.spacing,
   });
 
   factory EnhancedPageConfig.fromJson(dynamic json) {
@@ -799,6 +873,8 @@ class EnhancedPageConfig {
           .map((child) => EnhancedComponentConfig.fromJson(child))
           .toList(),
       style: map['style'] != null ? StyleConfig.fromJson(map['style']) : null,
+      columns: ParsingUtils.safeToInt(map['columns']),
+      spacing: ParsingUtils.safeToDouble(map['spacing']),
     );
   }
 }

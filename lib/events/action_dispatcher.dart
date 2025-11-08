@@ -291,6 +291,37 @@ class EnhancedActionDispatcher {
     }
 
     try {
+      // Special-case: route analytics trackEvent via AnalyticsService batching
+      final serviceKey = service.toLowerCase();
+      final endpointKey = endpoint.toLowerCase();
+      if ((serviceKey == 'analytics' || serviceKey == 'analyticsservice') && endpointKey == 'trackevent') {
+        final analytics = AnalyticsService();
+        final ev = data['event']?.toString();
+        final feature = data['feature']?.toString();
+        final actionName = data['action']?.toString();
+        final componentId = feature ?? actionName ?? ev ?? 'unknown';
+
+        analytics.trackComponentInteraction(
+          componentId: componentId,
+          componentType: feature != null ? 'feature' : 'component',
+          eventType: TrackingEventType.tap,
+          data: {
+            if (ev != null) 'event': ev,
+            if (feature != null) 'feature': feature,
+            if (actionName != null) 'action': actionName,
+          },
+        );
+
+        // Flush immediately to ensure visibility in backend collections
+        await analytics.flush();
+
+        // Execute success callback if provided
+        if (config.onSuccess != null) {
+          await execute(context, config.onSuccess!, {'response': {'ok': true}});
+        }
+        return;
+      }
+
       final response = await _apiService.call(
         service: service,
         endpoint: endpoint,
